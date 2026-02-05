@@ -1,9 +1,24 @@
 import { useState, useEffect } from 'react'
-import { Save, X, Plus, Trash2 } from 'lucide-react'
+import { Save, X, Plus, Trash2, FolderPlus } from 'lucide-react'
 
 export default function ProjectForm({ project, onSave, onCancel }) {
-    const [formData, setFormData] = useState(project)
+    // Ensure categoryMapping is always an object
+    const initialProject = {
+        ...project,
+        categoryMapping: project.categoryMapping || {},
+        excelConfig: project.excelConfig || {
+            filePath: '',
+            sheetName: '',
+            monthStartCell: 'B1',
+            categoryColumn: 'A',
+            categoryRowsMap: {}
+        }
+    }
+
+    const [formData, setFormData] = useState(initialProject)
     const [excelMetadata, setExcelMetadata] = useState({ tabs: [], categories: {} })
+    const [newFolderName, setNewFolderName] = useState('')
+    const [showAddRow, setShowAddRow] = useState(false)
 
     useEffect(() => {
         if (formData.excelConfig.filePath) {
@@ -53,13 +68,15 @@ export default function ProjectForm({ project, onSave, onCancel }) {
         }))
     }
 
-    const addMappingRow = () => {
-        const folderName = prompt('Enter the sub-folder name exactly as it appears in your month folders (e.g. achats_enfants)')
-        if (folderName && !formData.categoryMapping[folderName]) {
+    const addMappingRow = (e) => {
+        if (e) e.preventDefault()
+        if (newFolderName && !formData.categoryMapping[newFolderName]) {
             setFormData(prev => ({
                 ...prev,
-                categoryMapping: { ...prev.categoryMapping, [folderName]: '' }
+                categoryMapping: { ...prev.categoryMapping, [newFolderName]: '' }
             }))
+            setNewFolderName('')
+            setShowAddRow(false)
         }
     }
 
@@ -157,9 +174,29 @@ export default function ProjectForm({ project, onSave, onCancel }) {
             <div className="section">
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
                     <h3>3. Category Mapping</h3>
-                    <button type="button" className="btn-ghost flex" onClick={addMappingRow} style={{ color: 'var(--primary)' }}>
-                        <Plus size={16} /> Add Folder Mapping
-                    </button>
+                    {!showAddRow ? (
+                        <button type="button" className="btn-ghost flex" onClick={() => setShowAddRow(true)} style={{ color: 'var(--primary)' }}>
+                            <Plus size={16} /> Add Folder Mapping
+                        </button>
+                    ) : (
+                        <div className="flex" style={{ gap: '0.5rem' }}>
+                            <input
+                                type="text"
+                                placeholder="Folder Name (e.g. achats_enfants)"
+                                value={newFolderName}
+                                onChange={(e) => setNewFolderName(e.target.value)}
+                                style={{ width: '250px', padding: '0.4rem' }}
+                                autoFocus
+                                onKeyDown={(e) => e.key === 'Enter' && addMappingRow(e)}
+                            />
+                            <button type="button" className="btn-primary" onClick={addMappingRow}>
+                                <FolderPlus size={16} />
+                            </button>
+                            <button type="button" className="btn-ghost" onClick={() => { setShowAddRow(false); setNewFolderName(''); }}>
+                                <X size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
