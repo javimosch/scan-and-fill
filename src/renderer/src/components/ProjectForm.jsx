@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
-import { Save, X, Plus, Trash2, FolderPlus } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Save, X, Plus, Trash2, FolderPlus, Loader2 } from 'lucide-react'
 
 export default function ProjectForm({ project, onSave, onCancel }) {
-    // Ensure categoryMapping is always an object
+    // Ensure categoryMapping is always an object and stable
     const initialProject = {
         ...project,
         categoryMapping: project.categoryMapping || {},
@@ -17,8 +17,13 @@ export default function ProjectForm({ project, onSave, onCancel }) {
 
     const [formData, setFormData] = useState(initialProject)
     const [excelMetadata, setExcelMetadata] = useState({ tabs: [], categories: {} })
+    const [loadingMetadata, setLoadingMetadata] = useState(false)
     const [newFolderName, setNewFolderName] = useState('')
     const [showAddRow, setShowAddRow] = useState(false)
+
+    // Ref to avoid stale closures in effects if needed
+    const formDataRef = useRef(formData)
+    useEffect(() => { formDataRef.current = formData }, [formData])
 
     useEffect(() => {
         if (formData.excelConfig.filePath) {
@@ -27,6 +32,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
     }, [formData.excelConfig.filePath, formData.excelConfig.sheetName, formData.excelConfig.categoryColumn])
 
     const loadExcelMetadata = async () => {
+        setLoadingMetadata(true)
         try {
             const metadata = await window.api.getExcelMetadata(
                 formData.excelConfig.filePath,
@@ -34,8 +40,34 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                 formData.excelConfig.categoryColumn
             )
             setExcelMetadata(metadata)
+
+            // Sync row numbers: If we have existing mappings, update their row numbers
+            // based on the newly loaded metadata labels.
+            if (Object.keys(formDataRef.current.categoryMapping).length > 0) {
+                const updatedRowsMap = { ...formDataRef.current.excelConfig.categoryRowsMap }
+                let changed = false;
+
+                Object.values(formDataRef.current.categoryMapping).forEach(label => {
+                    if (label && metadata.categories[label] !== undefined) {
+                        const newRow = metadata.categories[label];
+                        if (updatedRowsMap[label] !== newRow) {
+                            updatedRowsMap[label] = newRow;
+                            changed = true;
+                        }
+                    }
+                });
+
+                if (changed) {
+                    setFormData(prev => ({
+                        ...prev,
+                        excelConfig: { ...prev.excelConfig, categoryRowsMap: updatedRowsMap }
+                    }));
+                }
+            }
         } catch (error) {
             console.error('Failed to load excel metadata:', error)
+        } finally {
+            setLoadingMetadata(false)
         }
     }
 
@@ -99,7 +131,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                     <button type="button" className="btn-ghost" onClick={onCancel}>
                         <X size={18} />
                     </button>
-                    <button type="submit" className="btn-primary flex">
+                    <button type="submit" className="btn-primary flex" disabled={loadingMetadata}>
                         <Save size={18} />
                         Save Project
                     </button>
@@ -145,7 +177,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                     </div>
                     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div className="input-group">
-                            <label>Sheet (Tab)</label>
+                            <label>Sheet (Tab) {loadingMetadata && <Loader2 size={12} className="animate-spin inline" />}</label>
                             <select
                                 name="sheetName"
                                 value={formData.excelConfig.sheetName}
@@ -173,7 +205,10 @@ export default function ProjectForm({ project, onSave, onCancel }) {
 
             <div className="section">
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                    <h3>3. Category Mapping</h3>
+                    <h3 className="flex">
+                        3. Category Mapping
+                        {loadingMetadata && <Loader2 size={16} className="animate-spin" style={{ marginLeft: '1rem' }} />}
+                    </h3>
                     {!showAddRow ? (
                         <button type="button" className="btn-ghost flex" onClick={() => setShowAddRow(true)} style={{ color: 'var(--primary)' }}>
                             <Plus size={16} /> Add Folder Mapping
@@ -182,7 +217,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                         <div className="flex" style={{ gap: '0.5rem' }}>
                             <input
                                 type="text"
-                                placeholder="Folder Name (e.g. achats_enfants)"
+                                placeholder="Folder Name"
                                 value={newFolderName}
                                 onChange={(e) => setNewFolderName(e.target.value)}
                                 style={{ width: '250px', padding: '0.4rem' }}
@@ -224,15 +259,20 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                                         value={excelLabel}
                                         onChange={(e) => handleCategoryMappingChange(folderName, e.target.value)}
                                         style={{ padding: '0.4rem' }}
+                                        disabled={loadingMetadata}
                                     >
-                                        <option value="">Map to...</option>
+                                        <option value="">{loadingMetadata ? 'Loading...' : 'Map to...'}</option>
                                         {Object.keys(excelMetadata.categories).map(cat => (
                                             <option key={cat} value={cat}>{cat}</option>
                                         ))}
+                                        {/* Show currently selected label even if not in metadata list yet (to avoid empty select) */}
+                                        {excelLabel && !excelMetadata.categories[excelLabel] && (
+                                            <option value={excelLabel}>{excelLabel} (!)</option>
+                                        )}
                                     </select>
                                 </td>
                                 <td style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>
-                                    {excelMetadata.categories[excelLabel] || '-'}
+                                    {excelMetadata.categories[excelLabel] || formData.excelConfig.categoryRowsMap[excelLabel] || '-'}
                                 </td>
                                 <td style={{ padding: '0.5rem', textAlign: 'right' }}>
                                     <button type="button" className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => removeMappingRow(folderName)}>

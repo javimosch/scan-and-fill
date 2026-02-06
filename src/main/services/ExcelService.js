@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import fs from 'fs';
+import { ScannerService } from './ScannerService.js';
 
 /**
  * Service to interact with Excel files.
@@ -7,15 +8,6 @@ import fs from 'fs';
 export default class ExcelService {
   /**
    * Updates an Excel sheet with the extracted totals.
-   * @param {string} filePath - Path to the Excel file.
-   * @param {string} sheetName - Name of the worksheet.
-   * @param {Object} mapping - Mapping of months and categories to cells.
-   *   Example mapping: {
-   *     monthStartCell: 'B1', // January
-   *     categoryColumn: 'A', // Where category labels are
-   *     categoryMap: { 'Category1': 2, 'Category2': 3 } // Row numbers for categories
-   *   }
-   * @param {Object} data - Processed data { monthName: { categoryName: total } }
    */
   async updateSheet(filePath, sheetName, mapping, data) {
     if (!fs.existsSync(filePath)) {
@@ -32,28 +24,36 @@ export default class ExcelService {
 
     const { monthStartCell, categoryColumn, categoryRows } = mapping;
     const startCell = worksheet.getCell(monthStartCell);
-    const startRow = startCell.row;
     const startCol = startCell.col;
-
-    // Standard English month order to find offsets
-    const monthOrder = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    
+    // 1. Identify the base month from the start cell
+    const baseMonthValue = startCell.value ? startCell.value.toString() : '';
+    const scanner = new ScannerService();
+    const baseMonthInfo = scanner.identifyMonth(baseMonthValue);
+    
+    // If we can't identify the base month, fallback to January (index 0)
+    const baseMonthIdx = baseMonthInfo ? baseMonthInfo.index : 0;
 
     for (const [monthName, categories] of Object.entries(data)) {
-      const monthIdx = monthOrder.indexOf(monthName.toLowerCase());
-      if (monthIdx === -1) continue;
+      const monthInfo = scanner.identifyMonth(monthName);
+      if (!monthInfo) continue;
 
-      // Calculate column offset from January start cell
-      // Note: This logic assumes January is the start cell. 
-      // If user selected March as start cell, we need to adjust offset.
-      // For now, let's assume the user mapped the "first available month" in their sheet.
-      const col = startCol + monthIdx;
+      const currentMonthIdx = monthInfo.index;
+      
+      // 2. Calculate column offset relative to the base month
+      // e.g. Base is Feb (1), Current is March (2) -> Offset = 1
+      const colOffset = currentMonthIdx - baseMonthIdx;
+      
+      // Only process if the month is at or after the start cell (or handle negative if needed)
+      // For now, assume sequential months to the right.
+      const col = startCol + colOffset;
 
       for (const [categoryName, total] of Object.entries(categories)) {
         const row = categoryRows[categoryName];
         if (row) {
           const cell = worksheet.getRow(row).getCell(col);
           cell.value = total;
-          cell.numFmt = '#,##0.00'; // Format as currency/number
+          cell.numFmt = '#,##0.00';
         }
       }
     }
@@ -61,24 +61,12 @@ export default class ExcelService {
     await workbook.xlsx.writeFile(filePath);
   }
 
-  /**
-   * Helper to list tabs in a workbook.
-   * @param {string} filePath 
-   * @returns {Promise<string[]>}
-   */
   async getSheetNames(filePath) {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
       return workbook.worksheets.map(ws => ws.name);
   }
 
-  /**
-   * Helper to scan a sheet for potential category rows.
-   * @param {string} filePath 
-   * @param {string} sheetName 
-   * @param {string} categoryColumn 
-   * @returns {Promise<Object>} - { label: rowNumber }
-   */
   async findCategories(filePath, sheetName, categoryColumn = 'A') {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
@@ -88,7 +76,8 @@ export default class ExcelService {
       worksheet.eachRow((row, rowNumber) => {
           const value = row.getCell(categoryColumn).value;
           if (value && typeof value === 'string') {
-              categories[value] = rowNumber;
+              // Trim to match exactly
+              categories[value.trim()] = rowNumber;
           }
       });
       return categories;
