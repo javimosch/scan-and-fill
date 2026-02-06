@@ -40,7 +40,7 @@
 ## 5. Development Phases
 1. **Phase 1**: Setup Electron + Vite boilerplate.
 2. **Phase 2**: Implement Folder Scanner and Month detection logic.
-3. **Phase 4**: Implement PDF parsing and amount extraction.
+3. **Phase 3**: Implement PDF parsing and amount extraction.
 4. **Phase 4**: Implement Excel writing service.
 5. **Phase 5**: Build the Configuration UI (Project creation, mapping table).
 6. **Phase 6**: Polish UI/UX and localization.

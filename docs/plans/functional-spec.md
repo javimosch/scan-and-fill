@@ -73,6 +73,7 @@ The tool's identity is configurable via a `config.json` or similar:
 - **OS**: Windows, Linux.
 - **File Support**: PDF (source), XLSX/XLS (target).
 - **Core Engine**: Needs a robust PDF parsing library and an Excel manipulation library that preserves existing formatting.
+
 ## 7. Extraction Refinements
 
 ### 7.1 Smart Document Caching
