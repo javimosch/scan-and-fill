@@ -1,12 +1,17 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { pathToFileURL } from 'url'
 import icon from '../../resources/icon.png?asset'
 import ProjectService from './services/ProjectService.js'
 import MainService from './services/MainService.js'
 
 const projectService = new ProjectService()
 const mainService = new MainService()
+
+// Register custom protocol for local files (PDF preview)
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app-file', privileges: { secure: true, supportFetchAPI: true, standard: true } }
+])
 
 function createWindow() {
   // Create the browser window.
@@ -33,7 +38,7 @@ function createWindow() {
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -44,14 +49,46 @@ function createWindow() {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // Handle app-file:// protocol
+  // Handle app-file:// protocol
+  protocol.handle('app-file', (request) => {
+    try {
+      const parsed = new URL(request.url)
+      let filePath = parsed.pathname
+      
+      // On some systems/versions, standard schemes might parse the first path segment as hostname
+      // e.g. app-file://home/user -> hostname='home', pathname='/user'
+      // We need to reconstruct the absolute path
+      if (parsed.hostname) {
+        filePath = join('/', parsed.hostname, filePath)
+      }
+
+      filePath = decodeURIComponent(filePath)
+      
+      // Handle Windows drive letters if needed (usually treated as pathname /C:/...)
+      // pathToFileURL handles this if format is correct.
+      
+      return net.fetch(pathToFileURL(filePath).toString())
+    } catch (e) {
+      console.error('[app-file] Protocol error:', e)
+      return new Response('Bad Request', { status: 400 })
+    }
+  })
+
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.electron')
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    if (!app.isPackaged) {
+      window.webContents.openDevTools();
+    } else {
+       // Disable shortcuts in production if needed, or leave default
+       window.setMenu(null); 
+    }
   })
 
   // IPC handlers for scan-and-fill
@@ -95,6 +132,24 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
+  ipcMain.handle('get-manual-entry', (_, filePath) => {
+    return mainService.getManualEntry(filePath)
+  })
+
+  ipcMain.handle('save-manual-entry', (_, filePath, amount) => {
+    return mainService.setManualEntry(filePath, amount)
+  })
+
+  ipcMain.handle('open-path', async (_, path) => {
+    try {
+        await shell.openPath(path)
+        return { success: true }
+    } catch (error) {
+        console.error('Failed to open path:', error)
+        return { success: false, error: error.message }
+    }
+  })
+
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
@@ -115,6 +170,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

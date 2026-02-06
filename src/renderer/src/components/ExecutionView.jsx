@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, AlertCircle, Loader2, AlertTriangle, ArrowRight, Play, X, FileText, Calendar, LayoutGrid, Check, Ban } from 'lucide-react'
-import ConflictResolver from './ConflictResolver'
+import ConflictResolver from './ConflictResolverPDF'
 import CollapsibleSection from './CollapsibleSection'
 
 export default function ExecutionView({ project, onClose }) {
@@ -265,8 +265,21 @@ export default function ExecutionView({ project, onClose }) {
                             <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 {summary.conflicts.map((conflict, idx) => (
                                     <div key={idx} className="card flex-between" style={{ padding: '0.75rem 1rem' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 600 }}>{conflict.fileName}</div>
+                                        <div style={{ flex: 1 }}>
+                                            <div className="flex" style={{ gap: '0.5rem', alignItems: 'center' }}>
+                                                <span style={{ fontWeight: 600 }}>{conflict.fileName}</span>
+                                                <span style={{
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 600,
+                                                    padding: '0.15rem 0.4rem',
+                                                    borderRadius: '0.25rem',
+                                                    backgroundColor: conflict.status === 'failed' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                                                    color: conflict.status === 'failed' ? 'var(--error)' : '#d97706',
+                                                    textTransform: 'uppercase'
+                                                }}>
+                                                    {conflict.status === 'failed' ? 'Failed' : 'Ambiguous'}
+                                                </span>
+                                            </div>
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{conflict.month} / {conflict.category}</div>
                                         </div>
                                         {conflict.resolvedAmount !== undefined ? (

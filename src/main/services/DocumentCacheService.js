@@ -7,9 +7,15 @@ import { app } from 'electron';
  */
 export default class DocumentCacheService {
   constructor() {
-    this.userDataPath = app.getPath('userData');
-    this.cacheDir = path.join(this.userDataPath, 'extraction-cache');
-    this.ensureDir();
+    this._cacheDir = null;
+  }
+
+  get cacheDir() {
+    if (!this._cacheDir) {
+        this._cacheDir = path.join(app.getPath('userData'), 'extraction-cache');
+        this.ensureDir();
+    }
+    return this._cacheDir;
   }
 
   ensureDir() {

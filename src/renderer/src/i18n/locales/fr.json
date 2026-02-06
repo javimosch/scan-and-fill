@@ -1,0 +1,29 @@
+{
+  "dashboard": {
+    "title": "Scanner de Dépenses",
+    "scanNew": "Scanner Nouveau Projet",
+    "continue": "Continuer",
+    "recentProjects": "Projets Récents",
+    "settings": "Paramètres",
+    "language": "Langue",
+    "noProjects": "Aucun projet trouvé. Créez votre premier projet pour commencer."
+  },
+  "scan": {
+    "selectFolder": "Sélectionner Dossier",
+    "selectExcel": "Sélectionner Fichier Excel",
+    "startScan": "Lancer le Scan",
+    "scanning": "Scan en cours...",
+    "parsing": "Analyse en cours...",
+    "resolving": "Résolution des Conflits"
+  },
+  "conflicts": {
+    "title": "Résoudre Conflit",
+    "pdfPreview": "Aperçu PDF",
+    "candidates": "Candidats",
+    "manualEntry": "Saisie Manuelle",
+    "apply": "Appliquer",
+    "cancel": "Annuler",
+    "lastEntry": "Dernière Saisie",
+    "noCandidates": "Aucun candidat détecté."
+  }
+}

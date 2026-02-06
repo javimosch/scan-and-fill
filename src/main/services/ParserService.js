@@ -4,11 +4,24 @@ import os from 'os';
 import { execSync } from 'child_process';
 import { PDFParse } from 'pdf-parse';
 import Tesseract from 'tesseract.js';
+import CacheService from './CacheService.js';
 
 /**
  * Service to extract currency amounts from PDF files with ambiguity detection.
  */
 export default class ParserService {
+  constructor() {
+    this._cache = null;
+  }
+
+  // Lazy-initialize cache to avoid accessing electron.app before it's ready
+  get cache() {
+    if (!this._cache) {
+      this._cache = new CacheService();
+    }
+    return this._cache;
+  }
+
   /**
    * Extracts the total amount from a PDF file.
    * @param {string} filePath - Path to the PDF file.
@@ -42,8 +55,16 @@ export default class ParserService {
 
   /**
    * Performs OCR on the PDF by converting pages to images first.
+   * Checks cache first to avoid re-processing.
    */
   async performOCR(filePath) {
+      // Check cache first
+      const cachedText = this.cache.getOCRCache(filePath);
+      if (cachedText) {
+          console.log(`[ParserService] Using cached OCR result (${cachedText.length} characters)`);
+          return cachedText;
+      }
+
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
       try {
           const baseName = path.basename(filePath, '.pdf');
@@ -72,6 +93,10 @@ export default class ParserService {
           }
 
           console.log(`[ParserService] OCR completed. Extracted ${fullText.length} characters.`);
+          
+          // Cache the result
+          this.cache.setOCRCache(filePath, fullText);
+          
           return fullText;
       } catch (error) {
           console.error('[ParserService] OCR failed:', error);
@@ -108,7 +133,8 @@ export default class ParserService {
         'total ttc', 'ttc', 'net a payer', 'net à payer', 'total à payer', 'total a payer',
         'net à régler', 'net a régler', 'à payer', 'a payer', 'total à régler', 'total a régler',
         'net a payer en €', 'net à payer en €', 'montant ttc', 'total eur ttc', 'total eur',
-        'a votre debit', 'total net a payer', 'total net ttc'
+        'a votre debit', 'total net a payer', 'total net ttc', 'net a payer ttc', 
+        'net a payer ttc en euros', 'net à payer ttc en euros'
     ];
     const strongKeywords = [
         'total due', 'amount due', 'balance due', 'total facturado', 'total factura',
@@ -131,7 +157,7 @@ export default class ParserService {
         'iban', 'siret', 'siren', 'ean', 'bic', 'swift', 'rib', 'account', 'compte', 'no.', 'ref',
         'colis', 'nb colis', 'livraison', 'capital', 'social', 'société', 'page', 'of', 'sur',
         'bord', 'bordereau', 'commande', 'réf', 'noël', 'noel', 'échéance', 'echeance',
-        'escompte', 'remise', 'p.u.', 'taux', 'tva'
+        'escompte', 'remise', 'p.u.', 'taux', 'tva', 'tél', 'tel', 'route', 'rue', 'avenue', 'adresse'
     ];
     
     const candidates = [];
@@ -322,6 +348,16 @@ export default class ParserService {
               continue;
           }
 
+          // Ignore phone numbers (patterns like 07 81 34 24 46 or 0781342446)
+          if (/0[1-9](\s?\d{2}){4}/.test(fullContext) || /tél|tel|phone/.test(fullContext)) {
+              continue;
+          }
+
+          // Ignore postal codes (5-digit numbers in France like 73340)
+          if (/\b\d{5}\b/.test(rawMatch) && rawMatch.length === 5 && !rawMatch.includes('.') && !rawMatch.includes(',')) {
+              continue;
+          }
+
           // Ignore large numeric strings (likely barcodes or bank details)
           if (rawMatch.replace(/[\s\.]/g, '').length > 12) {
               continue;
@@ -354,7 +390,15 @@ export default class ParserService {
               const end = Math.min(text.length, match.index + rawMatch.length + 50);
               const context = text.substring(start, end).replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
               
-              results.push({ amount, context: `...${context}...` });
+              results.push({ 
+                  amount, 
+                  context: `...${context}...`,
+                  fullContext: {
+                      fullContext: text,
+                      matchIndex: match.index,
+                      matchLength: rawMatch.length
+                  }
+              });
           }
       }
       return results;

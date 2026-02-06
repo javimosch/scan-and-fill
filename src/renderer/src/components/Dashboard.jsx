@@ -1,20 +1,24 @@
+import { useTranslation } from 'react-i18next';
 import { Folder, Plus, Edit2, Trash2, Play, RefreshCw } from 'lucide-react'
+import LanguageSelector from './LanguageSelector';
 
 export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun }) {
+    const { t } = useTranslation();
+
     return (
         <div>
             <div className="flex-between" style={{ marginBottom: '2rem' }}>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Projects</h2>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>{t('dashboard.recentProjects')}</h2>
                 <button className="btn-primary flex" onClick={onCreate}>
                     <Plus size={18} />
-                    New Project
+                    {t('dashboard.scanNew')}
                 </button>
             </div>
 
             {projects.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
                     <Folder size={48} style={{ marginBottom: '1rem', opacity: 0.5, color: 'var(--text-muted)' }} />
-                    <p style={{ color: 'var(--text-muted)' }}>No projects found. Create your first project to get started.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('dashboard.noProjects')}</p>
                 </div>
             ) : (
                 <div className="grid">
@@ -23,7 +27,7 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                             <div className="flex-between" style={{ marginBottom: '1rem' }}>
                                 <h3 style={{ margin: 0 }}>{project.name}</h3>
                                 <div className="flex">
-                                    <button className="btn-ghost" onClick={() => onEdit(project)} title="Edit">
+                                    <button className="btn-ghost" onClick={() => onEdit(project)} title={t('dashboard.settings')}>
                                         <Edit2 size={16} />
                                     </button>
                                     <button className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => onDelete(project.id)} title="Delete">
@@ -44,7 +48,7 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                                     onClick={() => onRun(project)}
                                 >
                                     <Play size={16} />
-                                    Run Process
+                                    {t('scan.startScan')}
                                 </button>
                                 <button
                                     className="btn-ghost"
@@ -62,6 +66,8 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                     ))}
                 </div>
             )}
+
+            <LanguageSelector />
         </div>
     )
 }

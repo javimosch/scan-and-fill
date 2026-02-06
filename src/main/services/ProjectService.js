@@ -4,9 +4,16 @@ import { app } from 'electron';
 
 export default class ProjectService {
   constructor() {
-    this.userDataPath = app.getPath('userData');
-    this.projectsFilePath = path.join(this.userDataPath, 'projects.json');
-    this.init();
+    this._projectsFilePath = null;
+  }
+
+  get projectsFilePath() {
+    if (!this._projectsFilePath) {
+      const userDataPath = app.getPath('userData');
+      this._projectsFilePath = path.join(userDataPath, 'projects.json');
+      this.init();
+    }
+    return this._projectsFilePath;
   }
 
   init() {

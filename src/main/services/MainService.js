@@ -159,4 +159,12 @@ export default class MainService {
 
     return { success: true };
   }
+
+  getManualEntry(filePath) {
+    return this.parser.cache.getManualEntry(filePath);
+  }
+
+  setManualEntry(filePath, amount) {
+    return this.parser.cache.setManualEntry(filePath, amount);
+  }
 }

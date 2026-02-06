@@ -17,7 +17,10 @@ const api = {
     return () => ipcRenderer.removeListener('process-progress', subscription)
   },
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
-  selectFile: (filters) => ipcRenderer.invoke('select-file', filters)
+  selectFile: (filters) => ipcRenderer.invoke('select-file', filters),
+  getManualEntry: (filePath) => ipcRenderer.invoke('get-manual-entry', filePath),
+  saveManualEntry: (filePath, amount) => ipcRenderer.invoke('save-manual-entry', filePath, amount),
+  openPath: (path) => ipcRenderer.invoke('open-path', path)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

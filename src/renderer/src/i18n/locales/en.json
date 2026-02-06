@@ -1,0 +1,29 @@
+{
+  "dashboard": {
+    "title": "Expense Scanner",
+    "scanNew": "Scan New Project",
+    "continue": "Continue Working",
+    "recentProjects": "Recent Projects",
+    "settings": "Settings",
+    "language": "Language",
+    "noProjects": "No projects found. Create your first project to get started."
+  },
+  "scan": {
+    "selectFolder": "Select Project Folder",
+    "selectExcel": "Select Excel File",
+    "startScan": "Start Scan",
+    "scanning": "Scanning...",
+    "parsing": "Parsing...",
+    "resolving": "Resolving Conflicts"
+  },
+  "conflicts": {
+    "title": "Resolve Conflict",
+    "pdfPreview": "PDF Preview",
+    "candidates": "Candidates",
+    "manualEntry": "Manual Entry",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "lastEntry": "Last Manual Entry",
+    "noCandidates": "No candidates detected."
+  }
+}
