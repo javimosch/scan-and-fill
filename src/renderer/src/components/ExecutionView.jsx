@@ -97,7 +97,15 @@ export default function ExecutionView({ project, onClose }) {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                     {files.map((file, i) => (
                                         <div key={i} className="flex-between" style={{ padding: '0.4rem', fontSize: '0.875rem', opacity: 0.8 }}>
-                                            <span className="flex"><FileText size={14} /> {file.fileName}</span>
+                                            <span className="flex">
+                                                <FileText size={14} />
+                                                <span style={{ marginLeft: '0.4rem' }}>{file.fileName}</span>
+                                                {['success', 'skip', 'resolved'].includes(file.status) && (
+                                                    <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: '#34d399' }}>
+                                                        ({file.amount.toFixed(2)} €)
+                                                    </span>
+                                                )}
+                                            </span>
                                             <span className={`status-tag ${file.status}`} style={{
                                                 padding: '0.1rem 0.5rem',
                                                 borderRadius: '4px',
@@ -106,7 +114,7 @@ export default function ExecutionView({ project, onClose }) {
                                                     file.status === 'success' ? 'rgba(34,197,94,0.1)' :
                                                         file.status === 'resolved' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.1)',
                                                 color: file.status === 'skip' ? 'inherit' :
-                                                    file.status === 'success' || file.status === 'resolved' ? 'var(--success)' : 'var(--error)'
+                                                    file.status === 'success' || file.status === 'resolved' ? '#34d399' : '#f87171'
                                             }}>
                                                 {file.status.toUpperCase()}
                                             </span>

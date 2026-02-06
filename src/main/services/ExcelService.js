@@ -71,17 +71,23 @@ export default class ExcelService {
       if (!worksheet) return { tabs, categories: {}, months: [] };
 
       const categories = {};
-      worksheet.eachRow((row, rowNumber) => {
-          const cell = row.getCell(categoryColumn);
-          const value = cell.value;
-          if (value && typeof value === 'string') {
-              const label = value.trim();
-              categories[label] = {
-                  row: rowNumber,
-                  address: cell.address
-              };
-          }
-      });
+      if (categoryColumn) {
+          worksheet.eachRow((row, rowNumber) => {
+              try {
+                  const cell = row.getCell(categoryColumn);
+                  const value = cell.value;
+                  if (value && typeof value === 'string') {
+                      const label = value.trim();
+                      categories[label] = {
+                          row: rowNumber,
+                          address: cell.address
+                      };
+                  }
+              } catch (e) {
+                  // Ignore invalid columns during row iteration
+              }
+          });
+      }
 
       const months = [];
       const scanner = new ScannerService();
