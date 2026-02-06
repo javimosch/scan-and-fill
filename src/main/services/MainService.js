@@ -1,11 +1,9 @@
-import ScannerService from './ScannerService.js';
-import ParserService from './ParserService.js';
-import ExcelService from './ExcelService.js';
-import DocumentCacheService from './DocumentCacheService.js';
+import { ScannerService } from './ScannerService.js';
+import { ParserService } from './ParserService.js';
+import { ExcelService } from './ExcelService.js';
+import { DocumentCacheService } from './DocumentCacheService.js';
+import fs from 'fs';
 
-/**
- * Main orchestrator for the scan-and-fill process.
- */
 export default class MainService {
   constructor() {
     this.scanner = new ScannerService();
@@ -15,135 +13,150 @@ export default class MainService {
   }
 
   /**
-   * Runs the full scan and extract process.
-   * Collects results and identifies conflicts that need user attention.
+   * Proxies Excel metadata extraction.
    */
-  async runProcess(projectConfig, onProgress = () => {}) {
-    const { id: projectId, rootPath, categoryMapping, excelConfig, forceRescan } = projectConfig;
+  async getExcelMetadata(filePath, sheetName, categoryColumn, monthStartCell) {
+    return this.excel.getMetadata(filePath, sheetName, categoryColumn, monthStartCell);
+  }
 
-    if (forceRescan) {
-        this.cache.clearCache(projectId);
-    }
-
+  /**
+   * Orchestrates the document scanning and parsing process.
+   */
+  async runProcess(project, onProgress) {
     onProgress({ status: 'scanning', message: 'Scanning directory structure...' });
-    const scanResult = await this.scanner.scan(rootPath, categoryMapping);
 
-    const totalCategories = Object.values(scanResult.months).reduce((acc, m) => acc + Object.keys(m.categories).length, 0);
-    let processedCategories = 0;
+    // Pass monthFilter via project if it exists
+    const scanResult = await this.scanner.scan(project.rootPath, {
+        ...project.categoryMapping,
+        monthFilter: project.monthFilter
+    });
 
     const summary = {
-        projectId,
-        months: {},
-        conflicts: [] // Files that need manual review
+      projects: project.name,
+      files: [], // { month, category, fileName, status, amount, candidates, message }
+      totals: {}, // { month: { category: amount } }
+      conflicts: [],
+      stats: { done: 0, skipped: 0, failed: 0, ambiguous: 0, total: 0 }
     };
 
-    for (const [monthName, monthData] of Object.entries(scanResult.months)) {
-      summary.months[monthName] = {
-          categories: {},
-          originalName: monthData.originalName
-      };
+    const monthsToProcess = Object.keys(scanResult.months);
+    let processedFiles = 0;
+    const totalFiles = monthsToProcess.reduce((acc, m) => 
+        acc + Object.values(scanResult.months[m].categories).reduce((acc2, c) => acc2 + c.length, 0), 0
+    );
+
+    summary.stats.total = totalFiles;
+
+    for (const monthName of monthsToProcess) {
+      const monthData = scanResult.months[monthName];
+      if (!summary.totals[monthName]) summary.totals[monthName] = {};
 
       for (const [categoryName, filePaths] of Object.entries(monthData.categories)) {
-        onProgress({ 
-            status: 'parsing', 
-            message: `Processing ${monthName} - ${categoryName}...`,
-            progress: (processedCategories / totalCategories) * 100
-        });
-
         let categoryTotal = 0;
-        for (const filePath of filePaths) {
-            // Check Cache
-            const cached = this.cache.getValidEntry(projectId, filePath);
-            if (cached) {
-                categoryTotal += cached.extractedAmount;
-                continue;
-            }
 
-            // Extract
-            const result = await this.parser.extractAmount(filePath);
-            
-            if (result.status === 'success') {
-                categoryTotal += result.amount;
-                // Save to Cache
-                this.cache.updateEntry(projectId, filePath, {
-                    extractedAmount: result.amount,
-                    status: 'success'
-                });
-            } else {
-                // Buffer the conflict for user resolution
-                summary.conflicts.push({
-                    month: monthName,
-                    category: categoryName,
-                    filePath,
-                    fileName: filePath.split('/').pop(),
-                    status: result.status,
-                    candidates: result.candidates,
-                    message: result.message
-                });
+        for (const filePath of filePaths) {
+          processedFiles++;
+          const fileName = filePath.split('/').pop();
+          
+          onProgress({ 
+            status: 'parsing', 
+            message: `Parsing ${fileName}...`, 
+            progress: Math.round((processedFiles / totalFiles) * 100) 
+          });
+
+          // 1. Check Caching
+          let result = null;
+          if (!project.forceRescan) {
+            const cached = this.cache.getValidEntry(project.id, filePath);
+            if (cached) {
+              result = { status: 'success', amount: cached.amount, skipped: true };
             }
+          }
+
+          // 2. Extract if not cached
+          if (!result) {
+            result = await this.parser.extractAmount(filePath);
+            if (result.status === 'success') {
+              this.cache.updateEntry(project.id, filePath, {
+                amount: result.amount,
+                status: 'success'
+              });
+            }
+          }
+
+          const fileInfo = {
+            month: monthName,
+            category: categoryName,
+            fileName,
+            filePath,
+            status: result.skipped ? 'skip' : result.status,
+            amount: result.amount || 0,
+            message: result.message
+          };
+
+          summary.files.push(fileInfo);
+
+          if (result.status === 'success') {
+            categoryTotal += result.amount;
+            summary.stats.done += result.skipped ? 0 : 1;
+            if (result.skipped) summary.stats.skipped++;
+          } else if (result.status === 'ambiguous') {
+            summary.stats.ambiguous++;
+            summary.conflicts.push({
+              ...fileInfo,
+              candidates: result.candidates,
+              type: 'ambiguity'
+            });
+          } else {
+            summary.stats.failed++;
+            summary.conflicts.push({
+              ...fileInfo,
+              candidates: result.candidates || [],
+              type: 'failure'
+            });
+          }
         }
-        
-        summary.months[monthName].categories[categoryName] = categoryTotal;
-        processedCategories++;
+        summary.totals[monthName][categoryName] = categoryTotal;
       }
     }
 
-    onProgress({ status: 'waiting-resolutions', message: 'Waiting for manual resolutions...', summary });
+    if (summary.conflicts.length > 0) {
+      onProgress({ status: 'waiting-resolutions', message: 'Conflicts detected. Please resolve them.', summary });
+    } else {
+      onProgress({ status: 'review-results', message: 'Scan complete. Review results.', summary });
+    }
+
     return summary;
   }
 
   /**
-   * Finalizes the process after conflicts are resolved.
+   * Finalizes the process by updating the Excel file.
    */
-  async finalizeProcess(projectConfig, finalSummary) {
-    const { excelConfig, id: projectId } = projectConfig;
+  async finalizeProcess(project, summary) {
+    // Re-calculate totals based on resolutions
+    const finalTotals = { ...summary.totals };
     
-    // 1. Update Cache for resolved items
-    for (const conflict of finalSummary.conflicts) {
-        if (conflict.resolvedAmount !== undefined) {
-            this.cache.updateEntry(projectId, conflict.filePath, {
-                extractedAmount: conflict.resolvedAmount,
-                status: 'success'
-            });
-            
-            // Add to the monthly total in summary
-            finalSummary.months[conflict.month].categories[conflict.category] += conflict.resolvedAmount;
+    summary.files.forEach(f => {
+        if (f.resolvedAmount !== undefined) {
+            if (!finalTotals[f.month]) finalTotals[f.month] = {};
+            if (!finalTotals[f.month][f.category]) finalTotals[f.month][f.category] = 0;
+            finalTotals[f.month][f.category] += f.resolvedAmount;
         }
-    }
+    });
 
-    // 2. Format data for ExcelService
-    const excelData = {};
-    for (const [month, data] of Object.entries(finalSummary.months)) {
-        excelData[month] = data.categories;
-    }
-
-    const excelMapping = {
-      monthStartCell: excelConfig.monthStartCell,
-      categoryColumn: excelConfig.categoryColumn,
-      categoryRows: excelConfig.categoryRowsMap
+    const mapping = {
+      monthStartCell: project.excelConfig.monthStartCell,
+      categoryColumn: project.excelConfig.categoryColumn,
+      categoryRows: project.excelConfig.categoryRowsMap
     };
 
     await this.excel.updateSheet(
-      excelConfig.filePath,
-      excelConfig.sheetName,
-      excelMapping,
-      excelData
+      project.excelConfig.filePath,
+      project.excelConfig.sheetName,
+      mapping,
+      finalTotals
     );
 
-    return { status: 'done', message: 'Excel updated successfully!' };
-  }
-
-  /**
-   * Helper to get data needed for mapping configuration.
-   */
-  async getExcelMetadata(filePath, sheetName, categoryColumn) {
-      const tabs = await this.excel.getSheetNames(filePath);
-      let categories = {};
-      if (sheetName) {
-          categories = await this.excel.findCategories(filePath, sheetName, categoryColumn);
-      }
-      return { tabs, categories };
+    return { success: true };
   }
 }
-
-export { MainService };

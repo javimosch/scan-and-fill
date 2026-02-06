@@ -59,8 +59,8 @@ app.whenReady().then(() => {
   ipcMain.handle('save-project', (_, project) => projectService.saveProject(project))
   ipcMain.handle('delete-project', (_, projectId) => projectService.deleteProject(projectId))
   
-  ipcMain.handle('get-excel-metadata', (_, filePath, sheetName, categoryColumn) => 
-    mainService.getExcelMetadata(filePath, sheetName, categoryColumn)
+  ipcMain.handle('get-excel-metadata', (_, filePath, sheetName, categoryColumn, monthStartCell) => 
+    mainService.getExcelMetadata(filePath, sheetName, categoryColumn, monthStartCell)
   )
 
   ipcMain.handle('run-project', (event, project) => {

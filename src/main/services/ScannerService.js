@@ -46,6 +46,14 @@ export default class ScannerService {
     for (const folderName of topLevelFolders) {
       const monthInfo = this.identifyMonth(folderName);
       if (monthInfo) {
+        // Apply month filter if provided
+        if (categoryMapping && categoryMapping.monthFilter) {
+            const filterInfo = this.identifyMonth(categoryMapping.monthFilter);
+            if (filterInfo && filterInfo.index !== monthInfo.index) {
+                continue;
+            }
+        }
+
         const monthKey = monthInfo.standardName; // English full name
         if (!result.months[monthKey]) {
           result.months[monthKey] = {

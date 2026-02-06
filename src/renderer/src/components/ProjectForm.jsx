@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, X, Plus, Trash2, FolderPlus, Loader2 } from 'lucide-react'
+import { Save, X, Plus, Trash2, FolderPlus, Loader2, Calendar, Target } from 'lucide-react'
 
 export default function ProjectForm({ project, onSave, onCancel }) {
-    // Ensure categoryMapping is always an object and stable
     const initialProject = {
         ...project,
         categoryMapping: project.categoryMapping || {},
@@ -16,12 +15,11 @@ export default function ProjectForm({ project, onSave, onCancel }) {
     }
 
     const [formData, setFormData] = useState(initialProject)
-    const [excelMetadata, setExcelMetadata] = useState({ tabs: [], categories: {} })
+    const [excelMetadata, setExcelMetadata] = useState({ tabs: [], categories: {}, months: [] })
     const [loadingMetadata, setLoadingMetadata] = useState(false)
     const [newFolderName, setNewFolderName] = useState('')
     const [showAddRow, setShowAddRow] = useState(false)
 
-    // Ref to avoid stale closures in effects if needed
     const formDataRef = useRef(formData)
     useEffect(() => { formDataRef.current = formData }, [formData])
 
@@ -29,7 +27,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
         if (formData.excelConfig.filePath) {
             loadExcelMetadata()
         }
-    }, [formData.excelConfig.filePath, formData.excelConfig.sheetName, formData.excelConfig.categoryColumn])
+    }, [formData.excelConfig.filePath, formData.excelConfig.sheetName, formData.excelConfig.categoryColumn, formData.excelConfig.monthStartCell])
 
     const loadExcelMetadata = async () => {
         setLoadingMetadata(true)
@@ -37,19 +35,18 @@ export default function ProjectForm({ project, onSave, onCancel }) {
             const metadata = await window.api.getExcelMetadata(
                 formData.excelConfig.filePath,
                 formData.excelConfig.sheetName,
-                formData.excelConfig.categoryColumn
+                formData.excelConfig.categoryColumn,
+                formData.excelConfig.monthStartCell
             )
             setExcelMetadata(metadata)
 
-            // Sync row numbers: If we have existing mappings, update their row numbers
-            // based on the newly loaded metadata labels.
             if (Object.keys(formDataRef.current.categoryMapping).length > 0) {
                 const updatedRowsMap = { ...formDataRef.current.excelConfig.categoryRowsMap }
                 let changed = false;
 
                 Object.values(formDataRef.current.categoryMapping).forEach(label => {
                     if (label && metadata.categories[label] !== undefined) {
-                        const newRow = metadata.categories[label];
+                        const newRow = metadata.categories[label].row;
                         if (updatedRowsMap[label] !== newRow) {
                             updatedRowsMap[label] = newRow;
                             changed = true;
@@ -85,7 +82,8 @@ export default function ProjectForm({ project, onSave, onCancel }) {
     }
 
     const handleCategoryMappingChange = (folderName, excelLabel) => {
-        const rowNumber = excelMetadata.categories[excelLabel] || null
+        const catInfo = excelMetadata.categories[excelLabel]
+        const rowNumber = catInfo ? catInfo.row : null
 
         setFormData(prev => ({
             ...prev,
@@ -143,23 +141,11 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                     <h3>1. General Settings</h3>
                     <div className="input-group">
                         <label>Project Name</label>
-                        <input
-                            name="name"
-                            value={formData.name}
-                            onChange={handleChange}
-                            required
-                            placeholder="e.g. Bookstore Billing 2026"
-                        />
+                        <input name="name" value={formData.name} onChange={handleChange} required placeholder="e.g. Bookstore Billing 2026" />
                     </div>
                     <div className="input-group">
                         <label>Root Folder (PDFs Path)</label>
-                        <input
-                            name="rootPath"
-                            value={formData.rootPath}
-                            onChange={handleChange}
-                            required
-                            placeholder="/home/user/billing-2026"
-                        />
+                        <input name="rootPath" value={formData.rootPath} onChange={handleChange} required placeholder="/home/user/billing-2026" />
                     </div>
                 </div>
 
@@ -167,41 +153,41 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                     <h3>2. Excel Settings</h3>
                     <div className="input-group">
                         <label>Excel File Path (.xlsx)</label>
-                        <input
-                            name="filePath"
-                            value={formData.excelConfig.filePath}
-                            onChange={handleExcelConfigChange}
-                            required
-                            placeholder="/home/user/billing_sheet.xlsx"
-                        />
+                        <input name="filePath" value={formData.excelConfig.filePath} onChange={handleExcelConfigChange} required placeholder="/home/user/billing_sheet.xlsx" />
                     </div>
                     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div className="input-group">
                             <label>Sheet (Tab) {loadingMetadata && <Loader2 size={12} className="animate-spin inline" />}</label>
-                            <select
-                                name="sheetName"
-                                value={formData.excelConfig.sheetName}
-                                onChange={handleExcelConfigChange}
-                                required
-                            >
+                            <select name="sheetName" value={formData.excelConfig.sheetName} onChange={handleExcelConfigChange} required>
                                 <option value="">Select a tab...</option>
-                                {excelMetadata.tabs.map(tab => (
-                                    <option key={tab} value={tab}>{tab}</option>
-                                ))}
+                                {excelMetadata.tabs.map(tab => <option key={tab} value={tab}>{tab}</option>)}
                             </select>
                         </div>
                         <div className="input-group">
-                            <label>Month Start Cell</label>
-                            <input
-                                name="monthStartCell"
-                                value={formData.excelConfig.monthStartCell}
-                                onChange={handleExcelConfigChange}
-                                placeholder="e.g. B1"
-                            />
+                            <label>Month Start Cell (Header)</label>
+                            <input name="monthStartCell" value={formData.excelConfig.monthStartCell} onChange={handleExcelConfigChange} placeholder="e.g. B1" />
                         </div>
+                    </div>
+                    <div className="input-group" style={{ marginTop: '0.5rem' }}>
+                        <label>Category Label Column</label>
+                        <input name="categoryColumn" value={formData.excelConfig.categoryColumn} onChange={handleExcelConfigChange} placeholder="e.g. A" />
                     </div>
                 </div>
             </div>
+
+            {excelMetadata.months.length > 0 && (
+                <div className="section" style={{ backgroundColor: 'rgba(124, 58, 237, 0.05)', padding: '1rem', borderRadius: '8px' }}>
+                    <h4 className="flex" style={{ marginTop: 0, fontSize: '0.9rem' }}><Calendar size={16} /> Inferred Month Mapping (Columns)</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginTop: '0.5rem' }}>
+                        {excelMetadata.months.map((m, idx) => (
+                            <div key={idx} style={{ fontSize: '0.8rem' }}>
+                                <span style={{ fontWeight: 700 }}>{m.month}:</span> <span style={{ color: 'var(--primary)' }}>{m.address}</span>
+                                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>"{m.label}"</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="section">
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
@@ -215,21 +201,9 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                         </button>
                     ) : (
                         <div className="flex" style={{ gap: '0.5rem' }}>
-                            <input
-                                type="text"
-                                placeholder="Folder Name"
-                                value={newFolderName}
-                                onChange={(e) => setNewFolderName(e.target.value)}
-                                style={{ width: '250px', padding: '0.4rem' }}
-                                autoFocus
-                                onKeyDown={(e) => e.key === 'Enter' && addMappingRow(e)}
-                            />
-                            <button type="button" className="btn-primary" onClick={addMappingRow}>
-                                <FolderPlus size={16} />
-                            </button>
-                            <button type="button" className="btn-ghost" onClick={() => { setShowAddRow(false); setNewFolderName(''); }}>
-                                <X size={16} />
-                            </button>
+                            <input type="text" placeholder="Folder Name" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} style={{ width: '250px', padding: '0.4rem' }} autoFocus onKeyDown={(e) => e.key === 'Enter' && addMappingRow(e)} />
+                            <button type="button" className="btn-primary" onClick={addMappingRow}><FolderPlus size={16} /></button>
+                            <button type="button" className="btn-ghost" onClick={() => { setShowAddRow(false); setNewFolderName(''); }}><X size={16} /></button>
                         </div>
                     )}
                 </div>
@@ -239,7 +213,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                         <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                             <th style={{ padding: '0.5rem' }}>Sub-Folder Name</th>
                             <th style={{ padding: '0.5rem' }}>Excel Category Label</th>
-                            <th style={{ padding: '0.5rem' }}>Row</th>
+                            <th style={{ padding: '0.5rem' }}>Target Cell (Example for Jan)</th>
                             <th style={{ padding: '0.5rem' }}></th>
                         </tr>
                     </thead>
@@ -247,7 +221,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                         {Object.keys(formData.categoryMapping).length === 0 && (
                             <tr>
                                 <td colSpan="4" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
-                                    No mappings defined. Click "Add Folder Mapping" to start.
+                                    No mappings defined. Add folders that exist within your month directories.
                                 </td>
                             </tr>
                         )}
@@ -255,29 +229,25 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                             <tr key={folderName} style={{ borderTop: '1px solid var(--border)' }}>
                                 <td style={{ padding: '0.5rem' }}><code>{folderName}</code></td>
                                 <td style={{ padding: '0.5rem' }}>
-                                    <select
-                                        value={excelLabel}
-                                        onChange={(e) => handleCategoryMappingChange(folderName, e.target.value)}
-                                        style={{ padding: '0.4rem' }}
-                                        disabled={loadingMetadata}
-                                    >
+                                    <select value={excelLabel} onChange={(e) => handleCategoryMappingChange(folderName, e.target.value)} style={{ padding: '0.4rem', width: '100%' }} disabled={loadingMetadata}>
                                         <option value="">{loadingMetadata ? 'Loading...' : 'Map to...'}</option>
-                                        {Object.keys(excelMetadata.categories).map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
+                                        {Object.entries(excelMetadata.categories).map(([label, info]) => (
+                                            <option key={label} value={label}>{label} ({info.address})</option>
                                         ))}
-                                        {/* Show currently selected label even if not in metadata list yet (to avoid empty select) */}
                                         {excelLabel && !excelMetadata.categories[excelLabel] && (
-                                            <option value={excelLabel}>{excelLabel} (!)</option>
+                                            <option value={excelLabel}>{excelLabel} (Not found)</option>
                                         )}
                                     </select>
                                 </td>
-                                <td style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>
-                                    {excelMetadata.categories[excelLabel] || formData.excelConfig.categoryRowsMap[excelLabel] || '-'}
+                                <td style={{ padding: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                    {excelLabel && excelMetadata.categories[excelLabel] && excelMetadata.months.length > 0 ? (
+                                        <span className="flex" style={{ color: 'var(--success)' }}>
+                                            <Target size={12} /> Row {excelMetadata.categories[excelLabel].row}
+                                        </span>
+                                    ) : '-'}
                                 </td>
                                 <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                                    <button type="button" className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => removeMappingRow(folderName)}>
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <button type="button" className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => removeMappingRow(folderName)}><Trash2 size={14} /></button>
                                 </td>
                             </tr>
                         ))}

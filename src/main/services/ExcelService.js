@@ -41,11 +41,7 @@ export default class ExcelService {
       const currentMonthIdx = monthInfo.index;
       
       // 2. Calculate column offset relative to the base month
-      // e.g. Base is Feb (1), Current is March (2) -> Offset = 1
       const colOffset = currentMonthIdx - baseMonthIdx;
-      
-      // Only process if the month is at or after the start cell (or handle negative if needed)
-      // For now, assume sequential months to the right.
       const col = startCol + colOffset;
 
       for (const [categoryName, total] of Object.entries(categories)) {
@@ -61,26 +57,76 @@ export default class ExcelService {
     await workbook.xlsx.writeFile(filePath);
   }
 
+  /**
+   * Gets comprehensive metadata from an Excel file.
+   */
+  async getMetadata(filePath, sheetName, categoryColumn = 'A', monthStartCell = 'B1') {
+      if (!fs.existsSync(filePath)) return { tabs: [], categories: {}, months: [] };
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const tabs = workbook.worksheets.map(ws => ws.name);
+      
+      const worksheet = workbook.getWorksheet(sheetName) || workbook.worksheets[0];
+      if (!worksheet) return { tabs, categories: {}, months: [] };
+
+      const categories = {};
+      worksheet.eachRow((row, rowNumber) => {
+          const cell = row.getCell(categoryColumn);
+          const value = cell.value;
+          if (value && typeof value === 'string') {
+              const label = value.trim();
+              categories[label] = {
+                  row: rowNumber,
+                  address: cell.address
+              };
+          }
+      });
+
+      const months = [];
+      const scanner = new ScannerService();
+      try {
+          const startCell = worksheet.getCell(monthStartCell);
+          const startCol = startCell.col;
+          const startRow = startCell.row;
+
+          // Scan next 12 columns for months
+          for (let i = 0; i < 12; i++) {
+              const cell = worksheet.getRow(startRow).getCell(startCol + i);
+              const val = cell.value ? cell.value.toString() : '';
+              const monthInfo = scanner.identifyMonth(val);
+              if (monthInfo) {
+                  months.push({
+                      label: val,
+                      month: monthInfo.standardName,
+                      address: cell.address
+                  });
+              }
+          }
+      } catch (e) {
+          console.error('Error scanning months:', e);
+      }
+
+      return { tabs, categories, months };
+  }
+
+  /**
+   * @deprecated Use getMetadata
+   */
   async getSheetNames(filePath) {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
       return workbook.worksheets.map(ws => ws.name);
   }
 
+  /**
+   * @deprecated Use getMetadata
+   */
   async findCategories(filePath, sheetName, categoryColumn = 'A') {
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.readFile(filePath);
-      const worksheet = workbook.getWorksheet(sheetName);
-      
-      const categories = {};
-      worksheet.eachRow((row, rowNumber) => {
-          const value = row.getCell(categoryColumn).value;
-          if (value && typeof value === 'string') {
-              // Trim to match exactly
-              categories[value.trim()] = rowNumber;
-          }
-      });
-      return categories;
+      const res = await this.getMetadata(filePath, sheetName, categoryColumn);
+      const simple = {};
+      Object.entries(res.categories).forEach(([k, v]) => simple[k] = v.row);
+      return simple;
   }
 }
 

@@ -6,8 +6,8 @@ const api = {
   getProjects: () => ipcRenderer.invoke('get-projects'),
   saveProject: (project) => ipcRenderer.invoke('save-project', project),
   deleteProject: (projectId) => ipcRenderer.invoke('delete-project', projectId),
-  getExcelMetadata: (filePath, sheetName, categoryColumn) => 
-    ipcRenderer.invoke('get-excel-metadata', filePath, sheetName, categoryColumn),
+  getExcelMetadata: (filePath, sheetName, categoryColumn, monthStartCell) => 
+    ipcRenderer.invoke('get-excel-metadata', filePath, sheetName, categoryColumn, monthStartCell),
   runProject: (project) => ipcRenderer.invoke('run-project', project),
   finalizeProject: (project, summary) => ipcRenderer.invoke('finalize-project', project, summary),
   clearProjectCache: (projectId) => ipcRenderer.invoke('clear-project-cache', projectId),
