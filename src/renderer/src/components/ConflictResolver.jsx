@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Check, X, Info } from 'lucide-react'
 
 export default function ConflictResolver({ conflict, onResolve, onCancel }) {
+    const { t } = useTranslation()
     const [selectedAmount, setSelectedAmount] = useState('')
     const [manualAmount, setManualAmount] = useState('')
     const [contextWidth, setContextWidth] = useState(50) // Characters to show on each side
@@ -66,7 +68,7 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                 <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
                     <h3 className="flex" style={{ margin: 0 }}>
                         <AlertTriangle style={{ color: 'var(--primary)' }} />
-                        Resolve Conflict
+                        {t('conflictResolver.title')}
                     </h3>
                     <button className="btn-ghost" onClick={onCancel}><X size={20} /></button>
                 </div>
@@ -74,7 +76,7 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                 <div style={{ marginBottom: '1.5rem' }}>
                     <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{conflict.fileName}</p>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                        Located in: {conflict.month} / {conflict.category}
+                        {t('projectForm.mappingTable.noMappings')}: {conflict.month} / {conflict.category}
                     </p>
                 </div>
 
@@ -88,23 +90,23 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                     }}>
                         <div className="flex" style={{ gap: '0.5rem', alignItems: 'center' }}>
                             <Info size={16} style={{ color: 'var(--primary)' }} />
-                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Last Manual Entry</span>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{t('conflictResolver.lastEntry')}</span>
                         </div>
                         <p style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0.5rem 0 0 0', color: 'var(--primary)' }}>
                             {lastManualEntry.amount.toFixed(2)} €
                         </p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
-                            Entered on {new Date(lastManualEntry.timestamp).toLocaleString()}
+                            {t('messages.loadingMetadata')} {new Date(lastManualEntry.timestamp).toLocaleString()}
                         </p>
                     </div>
                 )}
 
                 <div className="section" style={{ marginBottom: '1.5rem' }}>
                     <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                        <h4 style={{ margin: 0 }}>Extracted Candidates</h4>
+                        <h4 style={{ margin: 0 }}>{t('conflictResolver.candidates')}</h4>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Context Width:
+                                {t('conflictResolver.context')}:
                             </label>
                             <input
                                 type="range"
@@ -120,12 +122,12 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                         </div>
                     </div>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                        Choose the correct amount from the detected values:
+                        {t('projectForm.mappingTable.mapTo')}:
                     </p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         {conflict.candidates.length === 0 && (
-                            <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No candidates detected automatically.</p>
+                            <p style={{ opacity: 0.5, fontStyle: 'italic' }}>{t('conflictResolver.noCandidates')}</p>
                         )}
                         {conflict.candidates.map((c, idx) => (
                             <label
@@ -165,9 +167,9 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                 </div>
 
                 <div className="section" style={{ marginBottom: '2rem' }}>
-                    <h4>Manual Entry</h4>
+                    <h4>{t('conflictResolver.manualEntry')}</h4>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                        Or enter the amount manually if none of the above are correct:
+                        {t('projectForm.mappingTable.noMappings')}:
                     </p>
                     <input
                         type="text"
@@ -186,14 +188,14 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                 </div>
 
                 <div className="flex-between">
-                    <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+                    <button className="btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
                     <button
                         className="btn-primary flex"
                         disabled={!selectedAmount && !manualAmount}
                         onClick={handleApply}
                     >
                         <Check size={18} />
-                        Apply Resolution
+                        {t('conflictResolver.apply')}
                     </button>
                 </div>
             </div>

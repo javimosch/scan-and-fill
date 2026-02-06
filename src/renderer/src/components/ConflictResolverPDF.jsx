@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink } from 'lucide-react'
 
 export default function ConflictResolverWithPDF({ conflict, remainingConflicts, onResolve, onCancel }) {
+    const { t } = useTranslation()
     const [selectedAmount, setSelectedAmount] = useState('')
     const [manualAmount, setManualAmount] = useState('')
     const [contextWidth, setContextWidth] = useState(50)
@@ -69,7 +71,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <h3 className="flex" style={{ margin: 0, gap: '0.5rem' }}>
                             <AlertTriangle style={{ color: 'var(--primary)' }} />
-                            Resolve Conflict
+                            {t('conflictResolver.title')}
                         </h3>
                         {remainingConflicts > 0 && (
                             <span style={{
@@ -80,7 +82,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                                 borderRadius: '1rem',
                                 fontWeight: 700
                             }}>
-                                {remainingConflicts} Left
+                                {remainingConflicts} {t('conflictResolver.remaining')}
                             </span>
                         )}
                     </div>
@@ -88,7 +90,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                         <button
                             className="btn-ghost"
                             onClick={() => setShowPdf(!showPdf)}
-                            title={showPdf ? "Hide PDF" : "Show PDF"}
+                            title={showPdf ? t('conflictResolver.hidePdf') : t('conflictResolver.showPdf')}
                         >
                             <FileText size={20} />
                         </button>
@@ -113,7 +115,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                             overflow: 'hidden'
                         }}>
                             <div className="flex-between" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                                <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>PDF Preview</span>
+                                <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{t('conflictResolver.pdfPreview')}</span>
                                 <div className="flex" style={{ gap: '0.5rem' }}>
                                     <button
                                         className="btn-ghost"
@@ -137,7 +139,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                                     <button
                                         className="btn-ghost"
                                         onClick={() => window.api.openPath(conflict.filePath)}
-                                        title="Open in System Viewer"
+                                        title={t('conflictResolver.openInSystemViewer')}
                                         style={{ padding: '0.25rem 0.5rem', marginLeft: '0.5rem' }}
                                     >
                                         <ExternalLink size={16} />
@@ -153,7 +155,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                                         border: 'none',
                                         backgroundColor: 'white'
                                     }}
-                                    title="PDF Preview"
+                                    title={t('conflictResolver.pdfPreview')}
                                 />
                             </div>
                         </div>
@@ -197,9 +199,9 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
 
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                                    <h4 style={{ margin: 0 }}>Candidates</h4>
+                                    <h4 style={{ margin: 0 }}>{t('conflictResolver.candidates')}</h4>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Context:</label>
+                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('conflictResolver.context')}:</label>
                                         <input
                                             type="range"
                                             min="20"
@@ -214,7 +216,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {conflict.candidates.length === 0 && (
-                                        <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No candidates detected.</p>
+                                        <p style={{ opacity: 0.5, fontStyle: 'italic' }}>{t('conflictResolver.noCandidates')}</p>
                                     )}
                                     {conflict.candidates.map((c, idx) => (
                                         <label
@@ -258,7 +260,7 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                             </div>
 
                             <div>
-                                <h4>Manual Entry</h4>
+                                <h4>{t('conflictResolver.manualEntry')}</h4>
                                 <input
                                     type="text"
                                     inputMode="decimal"
@@ -275,14 +277,14 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                         </div>
 
                         <div className="flex-between" style={{ padding: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                            <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+                            <button className="btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
                             <button
                                 className="btn-primary flex"
                                 disabled={!selectedAmount && !manualAmount}
                                 onClick={handleApply}
                             >
                                 <Check size={18} />
-                                Apply
+                                {t('conflictResolver.apply')}
                             </button>
                         </div>
                     </div>

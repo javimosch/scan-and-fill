@@ -30,7 +30,7 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                                     <button className="btn-ghost" onClick={() => onEdit(project)} title={t('dashboard.settings')}>
                                         <Edit2 size={16} />
                                     </button>
-                                    <button className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => onDelete(project.id)} title="Delete">
+                                    <button className="btn-ghost" style={{ color: 'var(--error)' }} onClick={() => onDelete(project.id)} title={t('common.delete')}>
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
@@ -52,9 +52,9 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                                 </button>
                                 <button
                                     className="btn-ghost"
-                                    title="Force Re-scan"
+                                    title={t('dashboard.forceRescan')}
                                     onClick={() => {
-                                        if (confirm('Force a full re-scan? This will ignore the cache for this run.')) {
+                                        if (confirm(t('dashboard.forceRescan'))) {
                                             onRun({ ...project, forceRescan: true });
                                         }
                                     }}

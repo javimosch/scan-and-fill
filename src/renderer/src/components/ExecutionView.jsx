@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CheckCircle, AlertCircle, Loader2, AlertTriangle, ArrowRight, Play, X, FileText, Calendar, LayoutGrid, Check, Ban } from 'lucide-react'
 import ConflictResolver from './ConflictResolverPDF'
 import CollapsibleSection from './CollapsibleSection'
 
 export default function ExecutionView({ project, onClose }) {
+    const { t } = useTranslation()
     const [scope, setScope] = useState('all')
     const [selectedMonth, setSelectedMonth] = useState('')
-    const [progress, setProgress] = useState({ status: 'idle', message: 'Ready to start...', progress: 0 })
+    const [progress, setProgress] = useState({ status: 'idle', message: t('execution.readyToStart'), progress: 0 })
     const [summary, setSummary] = useState(null)
     const [error, setError] = useState(null)
     const [activeConflictIdx, setActiveConflictIdx] = useState(null)
 
-    // Standard months for the selector
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    // Standard months for the selector - use fallback if translation not ready
+    const monthsTranslated = t('execution.months', { returnObjects: true })
+    const months = Array.isArray(monthsTranslated) ? monthsTranslated : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
     useEffect(() => {
         const unsubscribe = window.api.onProgress((update) => {
@@ -106,11 +109,11 @@ export default function ExecutionView({ project, onClose }) {
         return (
             <div style={{ marginTop: '2rem' }}>
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                    <h3>Scan Recap</h3>
+                    <h3>{t('execution.scanRecap')}</h3>
                     <div className="flex" style={{ gap: '1rem', fontSize: '0.875rem' }}>
-                        <span className="flex" style={{ color: 'var(--success)' }}><CheckCircle size={14} /> {summary.stats.done + summary.stats.skipped} Done</span>
-                        <span className="flex" style={{ color: 'var(--primary)' }}><AlertTriangle size={14} /> {summary.stats.ambiguous} Ambiguous</span>
-                        <span className="flex" style={{ color: 'var(--error)' }}><AlertCircle size={14} /> {summary.stats.failed} Failed</span>
+                        <span className="flex" style={{ color: 'var(--success)' }}><CheckCircle size={14} /> {summary.stats.done + summary.stats.skipped} {t('execution.done')}</span>
+                        <span className="flex" style={{ color: 'var(--primary)' }}><AlertTriangle size={14} /> {summary.stats.ambiguous} {t('execution.ambiguous')}</span>
+                        <span className="flex" style={{ color: 'var(--error)' }}><AlertCircle size={14} /> {summary.stats.failed} {t('execution.failed')}</span>
                     </div>
                 </div>
 
@@ -169,8 +172,8 @@ export default function ExecutionView({ project, onClose }) {
 
         return (
             <div style={{ marginTop: '3rem', padding: '2rem', border: '2px solid var(--primary)', borderRadius: '12px', backgroundColor: 'rgba(124, 58, 237, 0.05)' }}>
-                <h3 style={{ marginTop: 0 }}>Assignment Preview (Auto-fill)</h3>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Review the calculated totals per category before applying to Excel.</p>
+                <h3 style={{ marginTop: 0 }}>{t('conflictResolver.title')} - {t('execution.title')}</h3>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{t('projectForm.mappingTable.noMappings')}</p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {Object.entries(finalTotals).map(([cat, info]) => (
@@ -188,16 +191,16 @@ export default function ExecutionView({ project, onClose }) {
                 </div>
 
                 <div className="flex-between" style={{ marginTop: '2rem', padding: '1rem', borderTop: '2px solid var(--border)' }}>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Grand Total</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{t('conflictResolver.title')}</span>
                     <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>{grandTotal.toFixed(2)} €</span>
                 </div>
 
                 <div className="flex" style={{ marginTop: '2rem', gap: '1rem' }}>
                     <button className="btn-ghost flex" onClick={onClose} style={{ flex: 1, justifyContent: 'center' }}>
-                        <Ban size={18} /> Cancel
+                        <Ban size={18} /> {t('common.cancel')}
                     </button>
                     <button className="btn-primary flex" onClick={handleApply} style={{ flex: 2, justifyContent: 'center' }}>
-                        <Check size={18} /> Apply to Excel
+                        <Check size={18} /> {t('conflictResolver.apply')}
                     </button>
                 </div>
             </div>
@@ -209,29 +212,29 @@ export default function ExecutionView({ project, onClose }) {
     if (progress.status === 'idle') {
         return (
             <div className="card" style={{ maxWidth: '600px', margin: '2rem auto', textAlign: 'center' }}>
-                <h2>Processing Scope</h2>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Choose which months you want to scan and auto-fill.</p>
+                <h2>{t('execution.title')}</h2>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>{t('execution.selectMonth')}</p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
                     <label className={`card flex ${scope === 'all' ? 'selected' : ''}`} style={{ cursor: 'pointer', padding: '1.5rem', border: '1px solid var(--border)' }}>
                         <input type="radio" name="scope" value="all" checked={scope === 'all'} onChange={() => setScope('all')} style={{ width: 'auto' }} />
                         <div style={{ textAlign: 'left', flex: 1 }}>
-                            <div style={{ fontWeight: 700 }}>All (Detect from root)</div>
-                            <div style={{ fontSize: '0.875rem', opacity: 0.7 }}>Scans all month folders found in the root directory.</div>
+                            <div style={{ fontWeight: 700 }}>{t('execution.scopeAll')}</div>
+                            <div style={{ fontSize: '0.875rem', opacity: 0.7 }}>{t('projectForm.mappingTable.noMappings')}</div>
                         </div>
                     </label>
 
                     <label className={`card flex ${scope === 'single' ? 'selected' : ''}`} style={{ cursor: 'pointer', padding: '1.5rem', border: '1px solid var(--border)' }}>
                         <input type="radio" name="scope" value="single" checked={scope === 'single'} onChange={() => setScope('single')} style={{ width: 'auto' }} />
                         <div style={{ textAlign: 'left', flex: 1 }}>
-                            <div style={{ fontWeight: 700 }}>Single Month</div>
+                            <div style={{ fontWeight: 700 }}>{t('execution.scopeSingle')}</div>
                             <select
                                 value={selectedMonth}
                                 onChange={(e) => { setScope('single'); setSelectedMonth(e.target.value); }}
                                 style={{ marginTop: '0.5rem', padding: '0.5rem' }}
                                 disabled={scope !== 'single'}
                             >
-                                <option value="">Select a month...</option>
+                                <option value="">{t('execution.selectMonth')}</option>
                                 {months.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
@@ -239,9 +242,9 @@ export default function ExecutionView({ project, onClose }) {
                 </div>
 
                 <div className="flex" style={{ gap: '1rem' }}>
-                    <button className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
+                    <button className="btn-ghost" onClick={onClose} style={{ flex: 1 }}>{t('common.cancel')}</button>
                     <button className="btn-primary flex" onClick={handleStart} style={{ flex: 2, justifyContent: 'center' }} disabled={scope === 'single' && !selectedMonth}>
-                        <Play size={18} /> Start Process
+                        <Play size={18} /> {t('execution.startScan')}
                     </button>
                 </div>
             </div>

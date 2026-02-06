@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, X, Plus, Trash2, FolderPlus, Loader2, Calendar, Target, FolderSearch, FileSearch, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Save, X, Plus, Trash2, FolderPlus, Loader2, Calendar, Target, FolderSearch, FileSearch } from 'lucide-react'
 
 export default function ProjectForm({ project, onSave, onCancel }) {
+    const { t } = useTranslation()
     const initialProject = {
         ...project,
         categoryMapping: project.categoryMapping || {},
@@ -144,30 +146,30 @@ export default function ProjectForm({ project, onSave, onCancel }) {
     return (
         <form className="card" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <div className="flex-between">
-                <h2 style={{ margin: 0 }}>{project.name ? 'Edit Project' : 'New Project'}</h2>
+                <h2 style={{ margin: 0 }}>{project.name ? t('projectForm.editTitle') : t('projectForm.newProject')}</h2>
                 <div className="flex">
                     <button type="button" className="btn-ghost" onClick={onCancel}>
                         <X size={18} />
                     </button>
                     <button type="submit" className="btn-primary flex" disabled={loadingMetadata}>
                         <Save size={18} />
-                        Save Project
+                        {t('projectForm.saveProject')}
                     </button>
                 </div>
             </div>
 
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                 <div className="section">
-                    <h3>1. General Settings</h3>
+                    <h3>{t('projectForm.generalSettings')}</h3>
                     <div className="input-group">
-                        <label>Project Name</label>
-                        <input name="name" value={formData.name} onChange={handleChange} required placeholder="e.g. Bookstore Billing 2026" />
+                        <label>{t('projectForm.projectName')}</label>
+                        <input name="name" value={formData.name} onChange={handleChange} required placeholder={t('projectForm.projectNamePlaceholder')} />
                     </div>
                     <div className="input-group">
-                        <label>Root Folder (PDFs Path)</label>
+                        <label>{t('projectForm.rootFolder')}</label>
                         <div className="flex" style={{ gap: '0.5rem' }}>
-                            <input name="rootPath" value={formData.rootPath} onChange={handleChange} required placeholder="/home/user/billing-2026" style={{ flex: 1 }} />
-                            <button type="button" className="btn-ghost" onClick={handleSelectDirectory} title="Select Directory">
+                            <input name="rootPath" value={formData.rootPath} onChange={handleChange} required placeholder={t('projectForm.rootFolderPlaceholder')} style={{ flex: 1 }} />
+                            <button type="button" className="btn-ghost" onClick={handleSelectDirectory} title={t('projectForm.selectDirectory')}>
                                 <FolderSearch size={18} />
                             </button>
                         </div>
@@ -175,39 +177,39 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                 </div>
 
                 <div className="section">
-                    <h3>2. Spreadsheet Settings</h3>
+                    <h3>{t('projectForm.spreadsheetSettings')}</h3>
                     <div className="input-group">
-                        <label>File Path (.xlsx, .ods)</label>
+                        <label>{t('projectForm.filePath')}</label>
                         <div className="flex" style={{ gap: '0.5rem' }}>
-                            <input name="filePath" value={formData.excelConfig.filePath} onChange={handleExcelConfigChange} required placeholder="/home/user/billing_sheet.xlsx" style={{ flex: 1 }} />
-                            <button type="button" className="btn-ghost" onClick={handleSelectFile} title="Select Spreadsheet">
+                            <input name="filePath" value={formData.excelConfig.filePath} onChange={handleExcelConfigChange} required placeholder={t('projectForm.filePathPlaceholder')} style={{ flex: 1 }} />
+                            <button type="button" className="btn-ghost" onClick={handleSelectFile} title={t('projectForm.selectSpreadsheet')}>
                                 <FileSearch size={18} />
                             </button>
                         </div>
                     </div>
                     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div className="input-group">
-                            <label>Sheet (Tab) {loadingMetadata && <Loader2 size={12} className="animate-spin inline" />}</label>
+                            <label>{t('projectForm.sheetTab')} {loadingMetadata && <Loader2 size={12} className="animate-spin inline" />}</label>
                             <select name="sheetName" value={formData.excelConfig.sheetName} onChange={handleExcelConfigChange} required>
-                                <option value="">Select a tab...</option>
+                                <option value="">{t('projectForm.selectTab')}</option>
                                 {excelMetadata.tabs.map(tab => <option key={tab} value={tab}>{tab}</option>)}
                             </select>
                         </div>
                         <div className="input-group">
-                            <label>Month Start Cell (Header)</label>
-                            <input name="monthStartCell" value={formData.excelConfig.monthStartCell} onChange={handleExcelConfigChange} placeholder="e.g. B1" />
+                            <label>{t('projectForm.monthStartCell')}</label>
+                            <input name="monthStartCell" value={formData.excelConfig.monthStartCell} onChange={handleExcelConfigChange} placeholder={t('projectForm.monthStartCellPlaceholder')} />
                         </div>
                     </div>
                     <div className="input-group" style={{ marginTop: '0.5rem' }}>
-                        <label>Category Label Column</label>
-                        <input name="categoryColumn" value={formData.excelConfig.categoryColumn} onChange={handleExcelConfigChange} placeholder="e.g. A" />
+                        <label>{t('projectForm.categoryColumn')}</label>
+                        <input name="categoryColumn" value={formData.excelConfig.categoryColumn} onChange={handleExcelConfigChange} placeholder={t('projectForm.categoryColumnPlaceholder')} />
                     </div>
                 </div>
             </div>
 
             {excelMetadata.months.length > 0 && (
                 <div className="section" style={{ backgroundColor: 'rgba(124, 58, 237, 0.05)', padding: '1rem', borderRadius: '8px' }}>
-                    <h4 className="flex" style={{ marginTop: 0, fontSize: '0.9rem' }}><Calendar size={16} /> Inferred Month Mapping (Columns)</h4>
+                    <h4 className="flex" style={{ marginTop: 0, fontSize: '0.9rem' }}><Calendar size={16} /> {t('projectForm.inferredMonthMapping')}</h4>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginTop: '0.5rem' }}>
                         {excelMetadata.months.map((m, idx) => (
                             <div key={idx} style={{ fontSize: '0.8rem' }}>
@@ -222,16 +224,16 @@ export default function ProjectForm({ project, onSave, onCancel }) {
             <div className="section">
                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
                     <h3 className="flex">
-                        3. Category Mapping
+                        {t('projectForm.categoryMapping')}
                         {loadingMetadata && <Loader2 size={16} className="animate-spin" style={{ marginLeft: '1rem' }} />}
                     </h3>
                     {!showAddRow ? (
                         <button type="button" className="btn-ghost flex" onClick={() => setShowAddRow(true)} style={{ color: 'var(--primary)' }}>
-                            <Plus size={16} /> Add Folder Mapping
+                            <Plus size={16} /> {t('projectForm.addFolderMapping')}
                         </button>
                     ) : (
                         <div className="flex" style={{ gap: '0.5rem' }}>
-                            <input type="text" placeholder="Folder Name" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} style={{ width: '250px', padding: '0.4rem' }} autoFocus onKeyDown={(e) => e.key === 'Enter' && addMappingRow(e)} />
+                            <input type="text" placeholder={t('projectForm.folderNamePlaceholder')} value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} style={{ width: '250px', padding: '0.4rem' }} autoFocus onKeyDown={(e) => e.key === 'Enter' && addMappingRow(e)} />
                             <button type="button" className="btn-primary" onClick={addMappingRow}><FolderPlus size={16} /></button>
                             <button type="button" className="btn-ghost" onClick={() => { setShowAddRow(false); setNewFolderName(''); }}><X size={16} /></button>
                         </div>
@@ -241,9 +243,9 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                            <th style={{ padding: '0.5rem' }}>Sub-Folder Name</th>
-                            <th style={{ padding: '0.5rem' }}>Excel Category Label</th>
-                            <th style={{ padding: '0.5rem' }}>Target Cell (Example for Jan)</th>
+                            <th style={{ padding: '0.5rem' }}>{t('projectForm.mappingTable.subFolderName')}</th>
+                            <th style={{ padding: '0.5rem' }}>{t('projectForm.mappingTable.excelCategoryLabel')}</th>
+                            <th style={{ padding: '0.5rem' }}>{t('projectForm.mappingTable.targetCell')}</th>
                             <th style={{ padding: '0.5rem' }}></th>
                         </tr>
                     </thead>
@@ -251,7 +253,7 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                         {Object.keys(formData.categoryMapping).length === 0 && (
                             <tr>
                                 <td colSpan="4" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
-                                    No mappings defined. Add folders that exist within your month directories.
+                                    {t('projectForm.mappingTable.noMappings')}
                                 </td>
                             </tr>
                         )}
@@ -260,12 +262,12 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                                 <td style={{ padding: '0.5rem' }}><code>{folderName}</code></td>
                                 <td style={{ padding: '0.5rem' }}>
                                     <select value={excelLabel} onChange={(e) => handleCategoryMappingChange(folderName, e.target.value)} style={{ padding: '0.4rem', width: '100%' }} disabled={loadingMetadata}>
-                                        <option value="">{loadingMetadata ? 'Loading...' : 'Map to...'}</option>
+                                        <option value="">{loadingMetadata ? t('messages.loadingMetadata') : t('projectForm.mappingTable.mapTo')}</option>
                                         {Object.entries(excelMetadata.categories).map(([label, info]) => (
                                             <option key={label} value={label}>{label} ({info.address})</option>
                                         ))}
                                         {excelLabel && !excelMetadata.categories[excelLabel] && (
-                                            <option value={excelLabel}>{excelLabel} (Not found)</option>
+                                            <option value={excelLabel}>{excelLabel} ({t('messages.notFound')})</option>
                                         )}
                                     </select>
                                 </td>
