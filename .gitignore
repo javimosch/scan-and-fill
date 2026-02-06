@@ -8,3 +8,5 @@ out
 .DS_Store
 .eslintcache
 *.log*
+examples*
+examples/*
