@@ -13,7 +13,10 @@ export default function ConflictResolverWithPDF({ conflict, onResolve, onCancel 
         const loadLastEntry = async () => {
             try {
                 const entry = await window.api.getManualEntry(conflict.filePath);
-                if (entry) setLastManualEntry(entry);
+                if (entry) {
+                    setLastManualEntry(entry);
+                    setManualAmount(entry.amount.toString());
+                }
             } catch (error) {
                 console.warn('Failed to load last manual entry:', error);
             }

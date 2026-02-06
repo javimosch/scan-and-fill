@@ -51,7 +51,31 @@ export default function ExecutionView({ project, onClose }) {
 
         newSummary.conflicts[activeConflictIdx].resolvedAmount = amount
         setSummary(newSummary)
-        setActiveConflictIdx(null)
+
+        // Auto-advance to next unresolved conflict
+        let nextIdx = -1;
+        // Search forward
+        for (let i = activeConflictIdx + 1; i < newSummary.conflicts.length; i++) {
+            if (newSummary.conflicts[i].resolvedAmount === undefined) {
+                nextIdx = i;
+                break;
+            }
+        }
+        // Search backward (wrap around)
+        if (nextIdx === -1) {
+            for (let i = 0; i < activeConflictIdx; i++) {
+                if (newSummary.conflicts[i].resolvedAmount === undefined) {
+                    nextIdx = i;
+                    break;
+                }
+            }
+        }
+
+        if (nextIdx !== -1) {
+            setActiveConflictIdx(nextIdx);
+        } else {
+            setActiveConflictIdx(null);
+        }
     }
 
     const handleApply = async () => {
@@ -301,6 +325,7 @@ export default function ExecutionView({ project, onClose }) {
 
             {activeConflictIdx !== null && (
                 <ConflictResolver
+                    key={activeConflictIdx}
                     conflict={summary.conflicts[activeConflictIdx]}
                     onResolve={handleResolveConflict}
                     onCancel={() => setActiveConflictIdx(null)}

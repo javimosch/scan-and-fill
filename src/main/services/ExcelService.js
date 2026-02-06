@@ -67,7 +67,7 @@ export default class ExcelService {
   }
 
   async updateODS(filePath, sheetName, mapping, data) {
-    const workbook = XLSX.readFile(filePath);
+    const workbook = XLSX.readFile(filePath, { cellStyles: true, cellNF: true, cellDates: true });
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) {
       throw new Error(`Worksheet not found: ${sheetName}`);
@@ -168,7 +168,7 @@ export default class ExcelService {
   }
 
   async getODSMetadata(filePath, sheetName, categoryColumn, monthStartCell) {
-      const workbook = XLSX.readFile(filePath);
+      const workbook = XLSX.readFile(filePath, { cellStyles: true, cellNF: true, cellDates: true });
       const tabs = workbook.SheetNames;
       const worksheet = workbook.Sheets[sheetName] || workbook.Sheets[tabs[0]];
       
