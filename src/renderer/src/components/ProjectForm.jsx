@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, X, Plus, Trash2, FolderPlus, Loader2, Calendar, Target } from 'lucide-react'
+import { Save, X, Plus, Trash2, FolderPlus, Loader2, Calendar, Target, FolderSearch, FileSearch, Search } from 'lucide-react'
 
 export default function ProjectForm({ project, onSave, onCancel }) {
     const initialProject = {
@@ -116,6 +116,26 @@ export default function ProjectForm({ project, onSave, onCancel }) {
         setFormData(prev => ({ ...prev, categoryMapping: newMapping }))
     }
 
+    const handleSelectDirectory = async () => {
+        const path = await window.api.selectDirectory()
+        if (path) {
+            setFormData(prev => ({ ...prev, rootPath: path }))
+        }
+    }
+
+    const handleSelectFile = async () => {
+        const path = await window.api.selectFile([
+            { name: 'Spreadsheets', extensions: ['xlsx', 'ods'] },
+            { name: 'All Files', extensions: ['*'] }
+        ])
+        if (path) {
+            setFormData(prev => ({
+                ...prev,
+                excelConfig: { ...prev.excelConfig, filePath: path }
+            }))
+        }
+    }
+
     const handleSubmit = (e) => {
         e.preventDefault()
         onSave(formData)
@@ -145,15 +165,25 @@ export default function ProjectForm({ project, onSave, onCancel }) {
                     </div>
                     <div className="input-group">
                         <label>Root Folder (PDFs Path)</label>
-                        <input name="rootPath" value={formData.rootPath} onChange={handleChange} required placeholder="/home/user/billing-2026" />
+                        <div className="flex" style={{ gap: '0.5rem' }}>
+                            <input name="rootPath" value={formData.rootPath} onChange={handleChange} required placeholder="/home/user/billing-2026" style={{ flex: 1 }} />
+                            <button type="button" className="btn-ghost" onClick={handleSelectDirectory} title="Select Directory">
+                                <FolderSearch size={18} />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div className="section">
-                    <h3>2. Excel Settings</h3>
+                    <h3>2. Spreadsheet Settings</h3>
                     <div className="input-group">
-                        <label>Excel File Path (.xlsx)</label>
-                        <input name="filePath" value={formData.excelConfig.filePath} onChange={handleExcelConfigChange} required placeholder="/home/user/billing_sheet.xlsx" />
+                        <label>File Path (.xlsx, .ods)</label>
+                        <div className="flex" style={{ gap: '0.5rem' }}>
+                            <input name="filePath" value={formData.excelConfig.filePath} onChange={handleExcelConfigChange} required placeholder="/home/user/billing_sheet.xlsx" style={{ flex: 1 }} />
+                            <button type="button" className="btn-ghost" onClick={handleSelectFile} title="Select Spreadsheet">
+                                <FileSearch size={18} />
+                            </button>
+                        </div>
                     </div>
                     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div className="input-group">

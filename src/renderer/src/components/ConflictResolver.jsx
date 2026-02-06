@@ -6,7 +6,10 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
     const [manualAmount, setManualAmount] = useState('')
 
     const handleApply = () => {
-        const amount = manualAmount ? parseFloat(manualAmount) : parseFloat(selectedAmount);
+        const val = manualAmount || selectedAmount;
+        // Normalize comma to dot for parsing
+        const normalized = val.toString().replace(',', '.');
+        const amount = parseFloat(normalized);
         if (isNaN(amount)) return;
         onResolve(amount);
     }
@@ -15,7 +18,8 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
         <div className="modal-overlay" style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            userSelect: 'text' // Ensure text is selectable/editable
         }}>
             <div className="card" style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
                 <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
@@ -80,12 +84,16 @@ export default function ConflictResolver({ conflict, onResolve, onCancel }) {
                         Or enter the amount manually if none of the above are correct:
                     </p>
                     <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="0.00"
                         value={manualAmount}
+                        autoFocus
+                        style={{ fontSize: '1.25rem', fontWeight: 700, padding: '0.75rem' }}
                         onChange={(e) => {
-                            setManualAmount(e.target.value);
+                            // Allow numbers, dots, and commas
+                            const val = e.target.value.replace(/[^0-9.,]/g, '');
+                            setManualAmount(val);
                             setSelectedAmount('');
                         }}
                     />

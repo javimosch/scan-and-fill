@@ -22,7 +22,8 @@
     "@electron-toolkit/utils": "^4.0.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.563.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.1.0",

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -75,6 +75,24 @@ app.whenReady().then(() => {
 
   ipcMain.handle('clear-project-cache', (_, projectId) => {
     mainService.cache.clearCache(projectId)
+  })
+
+  ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory']
+    })
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('select-file', async (_, filters) => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: filters || [
+        { name: 'Spreadsheets', extensions: ['xlsx', 'ods'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    return result.filePaths[0]
   })
 
   // IPC test
