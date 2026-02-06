@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink } from 'lucide-react'
 
-export default function ConflictResolverWithPDF({ conflict, onResolve, onCancel }) {
+export default function ConflictResolverWithPDF({ conflict, remainingConflicts, onResolve, onCancel }) {
     const [selectedAmount, setSelectedAmount] = useState('')
     const [manualAmount, setManualAmount] = useState('')
     const [contextWidth, setContextWidth] = useState(50)
@@ -66,10 +66,24 @@ export default function ConflictResolverWithPDF({ conflict, onResolve, onCancel 
             }}>
                 {/* Header */}
                 <div className="flex-between" style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
-                    <h3 className="flex" style={{ margin: 0, gap: '0.5rem' }}>
-                        <AlertTriangle style={{ color: 'var(--primary)' }} />
-                        Resolve Conflict
-                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <h3 className="flex" style={{ margin: 0, gap: '0.5rem' }}>
+                            <AlertTriangle style={{ color: 'var(--primary)' }} />
+                            Resolve Conflict
+                        </h3>
+                        {remainingConflicts > 0 && (
+                            <span style={{
+                                fontSize: '0.75rem',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                color: 'var(--error)',
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '1rem',
+                                fontWeight: 700
+                            }}>
+                                {remainingConflicts} Left
+                            </span>
+                        )}
+                    </div>
                     <div className="flex" style={{ gap: '0.5rem' }}>
                         <button
                             className="btn-ghost"

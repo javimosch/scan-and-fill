@@ -327,6 +327,7 @@ export default function ExecutionView({ project, onClose }) {
                 <ConflictResolver
                     key={activeConflictIdx}
                     conflict={summary.conflicts[activeConflictIdx]}
+                    remainingConflicts={pendingConflicts.length}
                     onResolve={handleResolveConflict}
                     onCancel={() => setActiveConflictIdx(null)}
                 />
