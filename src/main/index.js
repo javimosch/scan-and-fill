@@ -4,9 +4,14 @@ import { pathToFileURL } from 'url'
 import icon from '../../resources/icon.png?asset'
 import ProjectService from './services/ProjectService.js'
 import MainService from './services/MainService.js'
+import SettingsService from './services/SettingsService.js'
+import ParserService from './services/ParserService.js'
+import CacheService from './services/CacheService.js'
 
 const projectService = new ProjectService()
 const mainService = new MainService()
+const settingsService = new SettingsService()
+const parserService = new ParserService()
 
 // Register custom protocol for local files (PDF preview)
 protocol.registerSchemesAsPrivileged([
@@ -78,7 +83,7 @@ app.whenReady().then(() => {
 
   // Set app user model id for windows
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.electron')
+    app.setAppUserModelId('com.javimosch.scan-and-fill');
   }
 
   // Default open or close DevTools by F12 in development
@@ -148,6 +153,80 @@ app.whenReady().then(() => {
     } catch (error) {
         console.error('Failed to open path:', error)
         return { success: false, error: error.message }
+    }
+  })
+
+  // Settings IPC handlers
+  ipcMain.handle('get-settings', () => {
+    return settingsService.getSettings()
+  })
+
+  ipcMain.handle('get-ai-settings', () => {
+    return settingsService.getAIDetectionSettings()
+  })
+
+  ipcMain.handle('update-ai-settings', (_, settings) => {
+    return settingsService.updateAIDetectionSettings(settings)
+  })
+
+  ipcMain.handle('update-setting', (_, key, value) => {
+    return settingsService.updateSetting(key, value)
+  })
+
+  ipcMain.handle('get-cache-stats', async () => {
+    try {
+      const cache = new CacheService();
+      const stats = cache.getStats();
+      return stats;
+    } catch (error) {
+      console.error('Failed to get cache stats:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('clear-ocr-cache', async () => {
+    try {
+      const cache = new CacheService();
+      await cache.clearOCRCacheJSON();
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to clear OCR cache:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('analyze-with-ai', async (_, filePath, text) => {
+    try {
+      const aiSettings = settingsService.getAIDetectionSettings()
+      const pageCount = parserService.getPageCount(filePath)
+      
+      if (!aiSettings.enabled) {
+        throw new Error('AI detection is disabled')
+      }
+      
+      if (pageCount > aiSettings.maxPages) {
+        throw new Error(`PDF has ${pageCount} pages, but AI is limited to ${aiSettings.maxPages} pages`)
+      }
+      
+      const pdfContext = {
+        fileName: require('path').basename(filePath),
+        pageCount
+      }
+      
+      return await parserService.manualAIAnalysis(text, pdfContext, aiSettings)
+    } catch (error) {
+      console.error('Manual AI analysis failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('extract-pdf-text', async (_, filePath) => {
+    try {
+      const text = await parserService.extractFullText(filePath)
+      return { success: true, text }
+    } catch (error) {
+      console.error('PDF text extraction failed:', error)
+      return { success: false, error: error.message }
     }
   })
 
