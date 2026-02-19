@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink } from 'lucide-react'
+import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink, Brain, Loader2 } from 'lucide-react'
 
 export default function ConflictResolverWithPDF({ conflict, remainingConflicts, onResolve, onCancel }) {
     const { t } = useTranslation()
@@ -10,6 +10,12 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
     const [lastManualEntry, setLastManualEntry] = useState(null)
     const [pdfZoom, setPdfZoom] = useState(100)
     const [showPdf, setShowPdf] = useState(true)
+    const [aiSettings, setAiSettings] = useState(null)
+    const [showAIBtn, setShowAIBtn] = useState(false)
+    const [aiLoading, setAiLoading] = useState(false)
+    const [aiResult, setAiResult] = useState(null)
+    const [aiError, setAiError] = useState('')
+    const [aiLoadingStage, setAiLoadingStage] = useState('') // 'extracting' or 'analyzing'
 
     useEffect(() => {
         const loadLastEntry = async () => {
@@ -26,6 +32,26 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
         loadLastEntry();
     }, [conflict.filePath]);
 
+    // Load AI settings and check if AI button should be shown
+    useEffect(() => {
+        const checkAIAvailability = async () => {
+            try {
+                const settings = await window.api.getAISettings();
+                setAiSettings(settings);
+                
+                // Check if AI should be available for this conflict
+                const shouldShow = settings.enabled && 
+                    (conflict.status === 'failed' || conflict.status === 'ambiguous');
+                
+                setShowAIBtn(shouldShow);
+            } catch (error) {
+                console.warn('Failed to load AI settings:', error);
+                setShowAIBtn(false);
+            }
+        };
+        checkAIAvailability();
+    }, [conflict.status]);
+
     const handleApply = async () => {
         const val = manualAmount || selectedAmount;
         const normalized = val.toString().replace(',', '.');
@@ -41,6 +67,49 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
         }
 
         onResolve(amount);
+    }
+
+    const handleAIAnalysis = async () => {
+        setAiLoading(true);
+        setAiError('');
+        setAiResult(null);
+        setAiLoadingStage('extracting');
+
+        try {
+            // Step 1: Extract full text from PDF
+            setAiError(''); // Clear any previous errors
+            
+            const extractionResult = await window.api.extractPDFText(conflict.filePath);
+            
+            if (!extractionResult.success) {
+                throw new Error(`Text extraction failed: ${extractionResult.error}`);
+            }
+
+            const text = extractionResult.text;
+            
+            if (!text.trim()) {
+                throw new Error('No text could be extracted from PDF');
+            }
+
+            // Step 2: Analyze extracted text with AI
+            setAiLoadingStage('analyzing');
+            const result = await window.api.analyzeWithAI(conflict.filePath, text);
+            
+            if (result.status === 'success') {
+                setAiResult(result);
+                // Auto-select the AI result
+                setSelectedAmount(result.amount.toString());
+                setManualAmount('');
+            } else {
+                setAiError(result.message || 'AI analysis failed');
+            }
+        } catch (error) {
+            console.error('AI analysis error:', error);
+            setAiError(error.message || 'AI analysis failed');
+        } finally {
+            setAiLoading(false);
+            setAiLoadingStage('');
+        }
     }
 
     const getAdjustedContext = (candidate) => {
@@ -258,6 +327,73 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                                     ))}
                                 </div>
                             </div>
+
+                            {/* AI Analysis Section */}
+                            {showAIBtn && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Brain size={16} />
+                                            AI Analysis
+                                        </h4>
+                                    </div>
+                                    
+                                    {aiResult && (
+                                        <div style={{
+                                            padding: '1rem',
+                                            backgroundColor: 'rgba(192, 38, 211, 0.1)',
+                                            border: '1px solid rgba(192, 38, 211, 0.3)',
+                                            borderRadius: '8px',
+                                            marginBottom: '1rem'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <Brain size={16} style={{ color: 'var(--primary)' }} />
+                                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>AI Detected Amount</span>
+                                            </div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                                {aiResult.amount.toFixed(2)} €
+                                            </div>
+                                            {aiResult.message && (
+                                                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                    {aiResult.message}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {aiError && (
+                                        <div style={{
+                                            padding: '0.75rem',
+                                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                            color: 'var(--error)',
+                                            borderRadius: '6px',
+                                            marginBottom: '1rem',
+                                            fontSize: '0.875rem'
+                                        }}>
+                                            {aiError}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        className="btn-primary flex"
+                                        onClick={handleAIAnalysis}
+                                        disabled={aiLoading}
+                                        style={{ justifyContent: 'center', gap: '0.5rem', width: '100%' }}
+                                    >
+                                        {aiLoading ? (
+                                            <>
+                                                <Loader2 size={16} className="animate-spin" />
+                                                {aiLoadingStage === 'extracting' ? 'Extracting text from PDF...' : 'Analyzing with AI...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Brain size={16} />
+                                                Analyze with AI
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
 
                             <div>
                                 <h4>{t('conflictResolver.manualEntry')}</h4>
