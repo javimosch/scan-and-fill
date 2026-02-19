@@ -111,7 +111,7 @@
     "cancel": "Cancel",
     "lastEntry": "Last Manual Entry",
     "noCandidates": "No candidates detected.",
-    "remaining": "{{count}} remaining",
+    "remaining": "remaining",
     "context": "Context",
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out"

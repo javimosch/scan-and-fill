@@ -111,7 +111,7 @@
     "cancel": "Annuler",
     "lastEntry": "Dernière Saisie",
     "noCandidates": "Aucun candidat détecté.",
-    "remaining": "{{count}} restant(s)",
+    "remaining": "restant(s)",
     "context": "Contexte",
     "zoomIn": "Zoom Avant",
     "zoomOut": "Zoom Arrière"
