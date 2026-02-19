@@ -20,7 +20,18 @@ const api = {
   selectFile: (filters) => ipcRenderer.invoke('select-file', filters),
   getManualEntry: (filePath) => ipcRenderer.invoke('get-manual-entry', filePath),
   saveManualEntry: (filePath, amount) => ipcRenderer.invoke('save-manual-entry', filePath, amount),
-  openPath: (path) => ipcRenderer.invoke('open-path', path)
+  openPath: (path) => ipcRenderer.invoke('open-path', path),
+  // Settings API
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  getAISettings: () => ipcRenderer.invoke('get-ai-settings'),
+  updateAISettings: (settings) => ipcRenderer.invoke('update-ai-settings', settings),
+  updateSetting: (key, value) => ipcRenderer.invoke('update-setting', key, value),
+  // OCR cache management
+  getCacheStats: () => ipcRenderer.invoke('get-cache-stats'),
+  clearOCRCache: () => ipcRenderer.invoke('clear-ocr-cache'),
+  // AI Analysis API
+  analyzeWithAI: (filePath, text) => ipcRenderer.invoke('analyze-with-ai', filePath, text),
+  extractPDFText: (filePath) => ipcRenderer.invoke('extract-pdf-text', filePath)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
