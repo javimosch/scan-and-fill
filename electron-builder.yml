@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.javimosch.scan-and-fill
 productName: scan-and-fill
 directories:
   buildResources: build
@@ -10,13 +10,20 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
 asarUnpack:
   - resources/**
+  - build/poppler-windows/**
 win:
   executableName: scan-and-fill
+  target:
+    target: nsis
+    arch:
+      - x64
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
