@@ -140,6 +140,87 @@ export default class CacheService {
   /**
    * Get cache statistics
    */
+  getStats() {
+    try {
+      // Count OCR cache files
+      let ocrEntries = 0;
+      try {
+        const files = fs.readdirSync(this.ocrCacheDir);
+        ocrEntries = files.filter(file => file.endsWith('.json')).length;
+      } catch (error) {
+        // Directory doesn't exist yet
+        ocrEntries = 0;
+      }
+      
+      // Count manual entries
+      let manualEntries = 0;
+      try {
+        if (fs.existsSync(this.manualEntriesPath)) {
+          const manualData = JSON.parse(fs.readFileSync(this.manualEntriesPath, 'utf8'));
+          manualEntries = Object.keys(manualData).length;
+        }
+      } catch (error) {
+        manualEntries = 0;
+      }
+      
+      // Calculate total cache size
+      let totalSize = 0;
+      try {
+        if (fs.existsSync(this.cacheDir)) {
+          const stats = fs.statSync(this.cacheDir);
+          totalSize = stats.size;
+        }
+      } catch (error) {
+        totalSize = 0;
+      }
+      
+      return {
+        ocrEntries,
+        manualEntries,
+        totalEntries: ocrEntries + manualEntries,
+        totalSize: `${(totalSize / 1024).toFixed(2)} KB`,
+        lastUpdated: new Date().toISOString()
+      };
+    } catch (error) {
+      return { 
+        ocrEntries: 0, 
+        manualEntries: 0, 
+        totalEntries: 0, 
+        totalSize: '0 KB',
+        lastUpdated: null
+      };
+    }
+  }
+
+  /**
+   * Clear OCR cache (JSON-based)
+   */
+  async clearOCRCacheJSON() {
+    try {
+      // Remove all OCR cache files
+      try {
+        const files = fs.readdirSync(this.ocrCacheDir);
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            fs.unlinkSync(path.join(this.ocrCacheDir, file));
+          }
+        }
+        console.log(`[CacheService] Cleared ${files.length} OCR cache files`);
+      } catch (error) {
+        // Directory doesn't exist or is empty
+        console.log('[CacheService] OCR cache directory empty or not found');
+      }
+      
+      console.log('[CacheService] OCR cache cleared successfully');
+    } catch (error) {
+      console.error('[CacheService] Failed to clear OCR cache:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cache file path
+   */
   getCacheStats() {
     try {
       const ocrFiles = fs.readdirSync(this.ocrCacheDir);
