@@ -1,18 +1,27 @@
 import { useTranslation } from 'react-i18next';
-import { Folder, Plus, Edit2, Trash2, Play, RefreshCw } from 'lucide-react'
+import { useState } from 'react';
+import { Folder, Plus, Edit2, Trash2, Play, RefreshCw, Settings } from 'lucide-react'
 import LanguageSelector from './LanguageSelector';
+import SettingsModal from './SettingsModal';
 
 export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun }) {
     const { t } = useTranslation();
+    const [showSettings, setShowSettings] = useState(false);
 
     return (
         <div>
             <div className="flex-between" style={{ marginBottom: '2rem' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>{t('dashboard.recentProjects')}</h2>
-                <button className="btn-primary flex" onClick={onCreate}>
-                    <Plus size={18} />
-                    {t('dashboard.scanNew')}
-                </button>
+                <div className="flex" style={{ gap: '1rem' }}>
+                    <button className="btn-ghost flex" onClick={() => setShowSettings(true)}>
+                        <Settings size={18} />
+                        Settings
+                    </button>
+                    <button className="btn-primary flex" onClick={onCreate}>
+                        <Plus size={18} />
+                        {t('dashboard.scanNew')}
+                    </button>
+                </div>
             </div>
 
             {projects.length === 0 ? (
@@ -68,6 +77,10 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
             )}
 
             <LanguageSelector />
+            <SettingsModal 
+                isOpen={showSettings} 
+                onClose={() => setShowSettings(false)} 
+            />
         </div>
     )
 }
