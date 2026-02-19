@@ -134,7 +134,14 @@ export default class ParserService {
             const isDev = !app.isPackaged;
             const popplerPath = isDev 
               ? path.join(process.cwd(), 'build', 'poppler-windows', 'poppler-25.12.0', 'Library', 'bin', 'pdftoppm.exe')
-              : path.join(process.resourcesPath, 'build', 'poppler-windows', 'poppler-25.12.0', 'Library', 'bin', 'pdftoppm.exe');
+              : path.join(process.resourcesPath, 'poppler-windows', 'poppler-25.12.0', 'Library', 'bin', 'pdftoppm.exe');
+            
+            // Validate binary exists
+            if (!fs.existsSync(popplerPath)) {
+              throw new Error(`Poppler binary not found at ${popplerPath}. Please ensure poppler-windows is properly bundled.`);
+            }
+            
+            console.log(`[ParserService] Using poppler binary: ${popplerPath}`);
             pdftoppmCommand = `"${popplerPath}"`;
           } else {
             // Use system pdftoppm on Linux/macOS
