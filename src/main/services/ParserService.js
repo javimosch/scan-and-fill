@@ -4,7 +4,10 @@ import os from 'os';
 import { execSync } from 'child_process';
 import { PDFParse } from 'pdf-parse';
 import Tesseract from 'tesseract.js';
+import { app } from 'electron';
 import CacheService from './CacheService.js';
+import AIDetectionService from './AIDetectionService.js';
+import SettingsService from './SettingsService.js';
 
 /**
  * Service to extract currency amounts from PDF files with ambiguity detection.
@@ -12,6 +15,8 @@ import CacheService from './CacheService.js';
 export default class ParserService {
   constructor() {
     this._cache = null;
+    this._aiDetection = new AIDetectionService();
+    this._settings = new SettingsService();
   }
 
   // Lazy-initialize cache to avoid accessing electron.app before it's ready
@@ -37,12 +42,61 @@ export default class ParserService {
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
-      if (!text || text.trim().length < 100) {
-          console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR...`);
+      if (!text || text.trim().length < 50) {
+          console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
           text = await this.performOCR(filePath);
       }
 
-      return this.findAmountInText(text, options.pattern);
+      let result = this.findAmountInText(text, options.pattern);
+      
+      // AI Detection Fallback
+      if (this._aiDetection.shouldUseFallback(result.status, this.getPageCount(filePath))) {
+        console.log(`[ParserService] OCR result: ${result.status}. Triggering AI detection fallback...`);
+        
+        try {
+          const aiSettings = this._settings.getAIDetectionSettings();
+          this._aiDetection.initialize(aiSettings);
+          
+          const pdfContext = {
+            fileName: path.basename(filePath),
+            pageCount: this.getPageCount(filePath)
+          };
+          
+          const aiResult = await this._aiDetection.extractAmountFromText(text, pdfContext);
+          
+          if (aiResult.status === 'success') {
+            console.log(`[ParserService] AI detection successful: ${aiResult.amount}`);
+            return {
+              ...aiResult,
+              method: 'ai',
+              fallback: true,
+              originalResult: result
+            };
+          } else {
+            console.log(`[ParserService] AI detection failed: ${aiResult.message}`);
+            return {
+              ...result,
+              method: 'ocr',
+              fallbackAttempted: true,
+              fallbackError: aiResult.message
+            };
+          }
+        } catch (aiError) {
+          console.error(`[ParserService] AI detection error:`, aiError);
+          return {
+            ...result,
+            method: 'ocr',
+            fallbackAttempted: true,
+            fallbackError: aiError.message
+          };
+        }
+      }
+
+      return {
+        ...result,
+        method: 'ocr',
+        fallbackAttempted: false
+      };
     } catch (error) {
       console.error(`Error parsing PDF ${filePath}:`, error);
       return { status: 'failed', amount: 0, candidates: [], message: error.message };
@@ -73,7 +127,21 @@ export default class ParserService {
           console.log(`[ParserService] Converting PDF to images in ${tempDir}...`);
           // Use pdftoppm (fast system tool) to convert PDF to PNG
           // We convert at 300 DPI for better OCR quality
-          execSync(`pdftoppm -png -r 300 "${filePath}" "${outputPrefix}"`);
+          // On Windows, use bundled poppler binaries
+          let pdftoppmCommand;
+          if (process.platform === 'win32') {
+            // Use bundled pdftoppm.exe on Windows
+            const isDev = !app.isPackaged;
+            const popplerPath = isDev 
+              ? path.join(process.cwd(), 'build', 'poppler-windows', 'poppler-25.12.0', 'Library', 'bin', 'pdftoppm.exe')
+              : path.join(process.resourcesPath, 'build', 'poppler-windows', 'poppler-25.12.0', 'Library', 'bin', 'pdftoppm.exe');
+            pdftoppmCommand = `"${popplerPath}"`;
+          } else {
+            // Use system pdftoppm on Linux/macOS
+            pdftoppmCommand = 'pdftoppm';
+          }
+          
+          execSync(`${pdftoppmCommand} -png -r 600 "${filePath}" "${outputPrefix}"`);
 
           const files = fs.readdirSync(tempDir)
               .filter(f => f.startsWith('page') && f.endsWith('.png'))
@@ -84,15 +152,101 @@ export default class ParserService {
           
           for (const file of files) {
               const imagePath = path.join(tempDir, file);
-              const { data: { text } } = await Tesseract.recognize(
-                  imagePath,
-                  'fra+eng', // French and English
-                  { logger: m => console.log(`[OCR] ${m.status}: ${Math.round(m.progress * 100)}%`) }
-              );
-              fullText += text + '\n';
+              console.log(`[ParserService] Processing OCR for ${file}...`);
+              
+              // Try multiple OCR approaches for better results
+              let bestText = '';
+              let bestQuality = 0;
+              
+              const ocrConfigs = [
+                {
+                  name: 'enhanced_french',
+                  languages: 'fra+eng',
+                  config: {
+                    tessedit_ocr_engine_mode: 3,
+                    tessedit_pageseg_mode: 6,
+                    preserve_interword_spaces: '1',
+                    tessedit_char_whitelist: '0123456789.,€$£ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzàâäéèêëïîôöùûüÿç'
+                  }
+                },
+                {
+                  name: 'standard_french',
+                  languages: 'fra+eng',
+                  config: {
+                    tessedit_ocr_engine_mode: 3,
+                    tessedit_pageseg_mode: 3,
+                    preserve_interword_spaces: '1'
+                  }
+                },
+                {
+                  name: 'auto_layout',
+                  languages: 'fra+eng',
+                  config: {
+                    tessedit_ocr_engine_mode: 3,
+                    tessedit_pageseg_mode: 1,
+                    preserve_interword_spaces: '1'
+                  }
+                },
+                {
+                  name: 'basic_french',
+                  languages: 'fra+eng',
+                  config: {
+                    tessedit_ocr_engine_mode: 1,
+                    tessedit_pageseg_mode: 6
+                  }
+                }
+              ];
+              
+              for (const ocrConfig of ocrConfigs) {
+                try {
+                  console.log(`[ParserService] Trying OCR config: ${ocrConfig.name}`);
+                  
+                  const { data: { text: ocrText } } = await Tesseract.recognize(
+                    imagePath,
+                    ocrConfig.languages,
+                    { 
+                      logger: () => {}, // Reduce log noise during multiple attempts
+                      ...ocrConfig.config
+                    }
+                  );
+                  
+                  // Assess OCR quality
+                  const quality = this.assessOCRQuality(ocrText);
+                  console.log(`[ParserService] OCR config ${ocrConfig.name}: quality=${quality.score}, words=${quality.wordCount}, text="${ocrText.substring(0, 50)}${ocrText.length > 50 ? '...' : ''}"`);
+                  
+                  if (quality.score > bestQuality) {
+                    bestQuality = quality.score;
+                    bestText = ocrText;
+                  }
+                  
+                } catch (ocrError) {
+                  console.warn(`[ParserService] OCR config ${ocrConfig.name} failed:`, ocrError.message);
+                }
+              }
+              
+              console.log(`[ParserService] Best OCR result for ${file}: "${bestText.substring(0, 100)}${bestText.length > 100 ? '...' : ''}" (${bestText.length} chars, quality=${bestQuality})`);
+              fullText += bestText + '\n';
           }
 
           console.log(`[ParserService] OCR completed. Extracted ${fullText.length} characters.`);
+          
+          // Validate OCR quality using the assessment method
+          const quality = this.assessOCRQuality(fullText);
+          
+          console.log(`[ParserService] OCR quality assessment: score=${quality.score}, words=${quality.wordCount}, hasNumbers=${quality.hasNumbers}, hasCurrency=${quality.hasCurrency}, hasAmountPattern=${quality.hasAmountPattern}`);
+          
+          if (!quality.isAcceptable) {
+            console.warn('[ParserService] OCR quality is poor - text may not be suitable for AI analysis');
+            console.warn('[ParserService] OCR text sample:', fullText.replace(/\s+/g, ' ').trim().substring(0, 200));
+            
+            // Provide suggestions for improvement
+            const suggestions = [];
+            if (quality.wordCount < 2) suggestions.push('Try scanning at higher resolution');
+            if (!quality.hasNumbers) suggestions.push('Ensure the document contains visible numbers');
+            if (!quality.hasCurrency) suggestions.push('Check if currency symbols are present');
+            
+            console.warn('[ParserService] Suggestions:', suggestions.join(', '));
+          }
           
           // Cache the result
           this.cache.setOCRCache(filePath, fullText);
@@ -109,6 +263,99 @@ export default class ParserService {
               console.warn(`[ParserService] Failed to cleanup temp dir ${tempDir}:`, e.message);
           }
       }
+  }
+
+  /**
+   * Extract full text from PDF for AI analysis
+   */
+  async extractFullText(filePath) {
+    try {
+      // Try normal PDF text extraction first
+      const dataBuffer = fs.readFileSync(filePath);
+      const parser = new PDFParse({ data: dataBuffer });
+      const data = await parser.getText();
+      let text = data.text;
+
+      // Detect scanned PDFs (no text or very little text)
+      if (!text || text.trim().length < 50) {
+        console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
+        text = await this.performOCR(filePath);
+      }
+
+      console.log(`[ParserService] Extracted ${text.length} characters for AI analysis`);
+      return text;
+    } catch (error) {
+      console.error('[ParserService] Failed to extract text for AI analysis:', error);
+      throw new Error(`Text extraction failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Manual AI analysis for conflict resolution
+   */
+  async manualAIAnalysis(text, pdfContext, aiSettings) {
+    try {
+      this._aiDetection.initialize(aiSettings)
+      const result = await this._aiDetection.extractAmountFromText(text, pdfContext)
+      
+      return {
+        ...result,
+        method: 'ai',
+        manual: true,
+        timestamp: new Date().toISOString()
+      }
+    } catch (error) {
+      console.error('[ParserService] Manual AI analysis failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Assess OCR quality to determine if text is suitable for AI analysis
+   */
+  assessOCRQuality(text) {
+    const meaningfulWords = text.split(/\s+/).filter(word => word.length > 2);
+    const wordCount = meaningfulWords.length;
+    const hasNumbers = /\d/.test(text);
+    const hasCurrency = /[€$£]/.test(text);
+    const hasAmountPattern = /\d+[.,]\d+/.test(text);
+    const charCount = text.replace(/\s+/g, '').length;
+    
+    // Calculate quality score
+    let score = 0;
+    score += wordCount * 2; // Each meaningful word is worth 2 points
+    score += hasNumbers ? 5 : 0; // Numbers are valuable
+    score += hasCurrency ? 10 : 0; // Currency symbols are very valuable
+    score += hasAmountPattern ? 15 : 0; // Amount patterns are most valuable
+    score += charCount > 50 ? 5 : 0; // Reasonable length
+    
+    return {
+      score,
+      wordCount,
+      hasNumbers,
+      hasCurrency,
+      hasAmountPattern,
+      charCount,
+      isAcceptable: score >= 10 || (wordCount >= 2 && hasNumbers)
+    };
+  }
+
+  /**
+   * Get page count from PDF
+   */
+  getPageCount(filePath) {
+    try {
+      // Simple page count estimation - in a real implementation you might use pdf-parse to get accurate count
+      // For now, we'll use a simple heuristic based on file size
+      const stats = fs.statSync(filePath);
+      const sizeInMB = stats.size / (1024 * 1024);
+      
+      // Rough estimate: ~1MB per page for typical PDFs
+      return Math.max(1, Math.ceil(sizeInMB));
+    } catch (error) {
+      console.warn(`[ParserService] Could not estimate page count: ${error.message}`);
+      return 1; // Default to 1 page
+    }
   }
 
   /**
