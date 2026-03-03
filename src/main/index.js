@@ -132,11 +132,16 @@ import MainService from './services/MainService.js'
 import SettingsService from './services/SettingsService.js'
 import ParserService from './services/ParserService.js'
 import CacheService from './services/CacheService.js'
+import LoggingService from './services/LoggingService.js'
+
+// Initialize logging first
+const logger = new LoggingService()
 
 const projectService = new ProjectService()
 const mainService = new MainService()
 const settingsService = new SettingsService()
 const parserService = new ParserService()
+const cacheService = new CacheService()
 
 // Register custom protocol for local files (PDF preview)
 protocol.registerSchemesAsPrivileged([
@@ -292,6 +297,25 @@ app.whenReady().then(() => {
 
   ipcMain.handle('update-ai-settings', (_, settings) => {
     return settingsService.updateAIDetectionSettings(settings)
+  })
+
+  // Logging IPC handlers
+  ipcMain.handle('get-log-files', () => {
+    return logger.getLogFiles()
+  })
+
+  ipcMain.handle('export-logs', async () => {
+    return await logger.exportLogs()
+  })
+
+  ipcMain.handle('open-log-directory', async () => {
+    try {
+      await shell.openPath(logger.getLogFiles())
+      return { success: true }
+    } catch (error) {
+      logger.error('Failed to open log directory:', error)
+      return { success: false, error: error.message }
+    }
   })
 
   ipcMain.handle('update-setting', (_, key, value) => {
