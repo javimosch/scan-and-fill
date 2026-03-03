@@ -1,3 +1,128 @@
+// DOMMatrix polyfill for Node.js environment (must be before any imports)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  try {
+    // Try to use @napi-rs/canvas DOMMatrix if available
+    const canvas = require('@napi-rs/canvas');
+    if (canvas.DOMMatrix) {
+      globalThis.DOMMatrix = canvas.DOMMatrix;
+    }
+  } catch (error) {
+    // Minimal DOMMatrix polyfill as fallback
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) {
+        if (typeof a === 'object') {
+          this.a = a.a || 1;
+          this.b = a.b || 0;
+          this.c = a.c || 0;
+          this.d = a.d || 1;
+          this.e = a.e || 0;
+          this.f = a.f || 0;
+        } else {
+          this.a = a;
+          this.b = b;
+          this.c = c;
+          this.d = d;
+          this.e = e;
+          this.f = f;
+        }
+      }
+      
+      scaleSelf(sx, sy = sx) {
+        this.a *= sx;
+        this.d *= sy;
+        return this;
+      }
+      
+      translateSelf(tx, ty) {
+        this.e += tx;
+        this.f += ty;
+        return this;
+      }
+      
+      invertSelf() {
+        const det = this.a * this.d - this.b * this.c;
+        if (det === 0) throw new Error('Matrix cannot be inverted');
+        
+        const a = this.a;
+        this.a = this.d / det;
+        this.d = a / det;
+        this.b = -this.b / det;
+        this.c = -this.c / det;
+        
+        const e = this.e;
+        const f = this.f;
+        this.e = (this.c * f - this.d * e) / det;
+        this.f = (this.b * e - this.a * f) / det;
+        
+        return this;
+      }
+      
+      multiplySelf(other) {
+        const a = this.a * other.a + this.c * other.b;
+        const b = this.b * other.a + this.d * other.b;
+        const c = this.a * other.c + this.c * other.d;
+        const d = this.b * other.c + this.d * other.d;
+        const e = this.a * other.e + this.c * other.f + this.e;
+        const f = this.b * other.e + this.d * other.f + this.f;
+        
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.d = d;
+        this.e = e;
+        this.f = f;
+        
+        return this;
+      }
+      
+      preMultiplySelf(other) {
+        return this.multiplySelf(other);
+      }
+    };
+  }
+}
+
+// Additional browser API polyfills for pdf-parse
+if (typeof globalThis.Path2D === 'undefined') {
+  try {
+    const canvas = require('@napi-rs/canvas');
+    if (canvas.Path2D) {
+      globalThis.Path2D = canvas.Path2D;
+    }
+  } catch (error) {
+    globalThis.Path2D = class Path2D {
+      constructor(path) {
+        this.path = path || '';
+      }
+      addPath(path, transform) {
+        // Minimal implementation
+      }
+    };
+  }
+}
+
+if (typeof globalThis.ImageData === 'undefined') {
+  try {
+    const canvas = require('@napi-rs/canvas');
+    if (canvas.ImageData) {
+      globalThis.ImageData = canvas.ImageData;
+    }
+  } catch (error) {
+    globalThis.ImageData = class ImageData {
+      constructor(data, width, height) {
+        this.data = data;
+        this.width = width;
+        this.height = height;
+      }
+    };
+  }
+}
+
+// Ensure global object is available
+if (typeof globalThis.global === 'undefined') {
+  globalThis.global = globalThis;
+}
+
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
