@@ -9,6 +9,90 @@ import CacheService from './CacheService.js';
 import AIDetectionService from './AIDetectionService.js';
 import SettingsService from './SettingsService.js';
 
+// DOMMatrix polyfill for Node.js environment (fallback)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  try {
+    // Try to use @napi-rs/canvas DOMMatrix if available
+    const canvas = require('@napi-rs/canvas');
+    if (canvas.DOMMatrix) {
+      globalThis.DOMMatrix = canvas.DOMMatrix;
+    }
+  } catch (error) {
+    // Minimal DOMMatrix polyfill as fallback
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) {
+        if (typeof a === 'object') {
+          this.a = a.a || 1;
+          this.b = a.b || 0;
+          this.c = a.c || 0;
+          this.d = a.d || 1;
+          this.e = a.e || 0;
+          this.f = a.f || 0;
+        } else {
+          this.a = a;
+          this.b = b;
+          this.c = c;
+          this.d = d;
+          this.e = e;
+          this.f = f;
+        }
+      }
+      
+      scaleSelf(sx, sy = sx) {
+        this.a *= sx;
+        this.d *= sy;
+        return this;
+      }
+      
+      translateSelf(tx, ty) {
+        this.e += tx;
+        this.f += ty;
+        return this;
+      }
+      
+      invertSelf() {
+        const det = this.a * this.d - this.b * this.c;
+        if (det === 0) throw new Error('Matrix cannot be inverted');
+        
+        const a = this.a;
+        this.a = this.d / det;
+        this.d = a / det;
+        this.b = -this.b / det;
+        this.c = -this.c / det;
+        
+        const e = this.e;
+        const f = this.f;
+        this.e = (this.c * f - this.d * e) / det;
+        this.f = (this.b * e - this.a * f) / det;
+        
+        return this;
+      }
+      
+      multiplySelf(other) {
+        const a = this.a * other.a + this.c * other.b;
+        const b = this.b * other.a + this.d * other.b;
+        const c = this.a * other.c + this.c * other.d;
+        const d = this.b * other.c + this.d * other.d;
+        const e = this.a * other.e + this.c * other.f + this.e;
+        const f = this.b * other.e + this.d * other.f + this.f;
+        
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.d = d;
+        this.e = e;
+        this.f = f;
+        
+        return this;
+      }
+      
+      preMultiplySelf(other) {
+        return this.multiplySelf(other);
+      }
+    };
+  }
+}
+
 /**
  * Service to extract currency amounts from PDF files with ambiguity detection.
  */
