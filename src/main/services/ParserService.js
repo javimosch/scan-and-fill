@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import { app } from 'electron';
 import CacheService from './CacheService.js';
@@ -120,7 +120,6 @@ export default class ParserService {
    * @returns {Promise<Object>} - The extraction result object.
    */
   async extractAmount(filePath, options = {}) {
-    let parser = null;
     const startTime = Date.now();
     
     this._logger.info(`Starting PDF extraction for: ${path.basename(filePath)}`);
@@ -139,10 +138,7 @@ export default class ParserService {
       const dataBuffer = fs.readFileSync(filePath);
       this._logger.debug(`Buffer size: ${dataBuffer.length} bytes`);
       
-      parser = new PDFParse({ data: dataBuffer });
-      this._logger.debug('PDFParse instance created');
-      
-      const data = await parser.getText();
+      const data = await pdfParse(dataBuffer);
       this._logger.debug(`PDF text extracted, length: ${data.text?.length || 0} characters`);
       
       let text = data.text;
@@ -234,15 +230,6 @@ export default class ParserService {
         message: error.message,
         error: error.stack
       };
-    } finally {
-      if (parser) {
-        try {
-          await parser.destroy();
-          this._logger.debug('PDFParse instance destroyed');
-        } catch (destroyError) {
-          this._logger.warn('Failed to destroy PDFParse instance:', destroyError);
-        }
-      }
     }
   }
 
@@ -432,20 +419,19 @@ export default class ParserService {
     try {
       // Try normal PDF text extraction first
       const dataBuffer = fs.readFileSync(filePath);
-      const parser = new PDFParse({ data: dataBuffer });
-      const data = await parser.getText();
+      const data = await pdfParse(dataBuffer);
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
       if (!text || text.trim().length < 50) {
-        console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
+        this._logger.info(`Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
         text = await this.performOCR(filePath);
       }
 
-      console.log(`[ParserService] Extracted ${text.length} characters for AI analysis`);
+      this._logger.info(`Extracted ${text.length} characters for AI analysis`);
       return text;
     } catch (error) {
-      console.error('[ParserService] Failed to extract text for AI analysis:', error);
+      this._logger.error('Failed to extract text for AI analysis:', error);
       throw new Error(`Text extraction failed: ${error.message}`);
     }
   }
