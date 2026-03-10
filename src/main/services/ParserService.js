@@ -2,12 +2,97 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import { app } from 'electron';
 import CacheService from './CacheService.js';
 import AIDetectionService from './AIDetectionService.js';
 import SettingsService from './SettingsService.js';
+import LoggingService from './LoggingService.js';
+
+// DOMMatrix polyfill for Node.js environment (fallback)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  try {
+    // Try to use @napi-rs/canvas DOMMatrix if available
+    const canvas = require('@napi-rs/canvas');
+    if (canvas.DOMMatrix) {
+      globalThis.DOMMatrix = canvas.DOMMatrix;
+    }
+  } catch (error) {
+    // Minimal DOMMatrix polyfill as fallback
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) {
+        if (typeof a === 'object') {
+          this.a = a.a || 1;
+          this.b = a.b || 0;
+          this.c = a.c || 0;
+          this.d = a.d || 1;
+          this.e = a.e || 0;
+          this.f = a.f || 0;
+        } else {
+          this.a = a;
+          this.b = b;
+          this.c = c;
+          this.d = d;
+          this.e = e;
+          this.f = f;
+        }
+      }
+      
+      scaleSelf(sx, sy = sx) {
+        this.a *= sx;
+        this.d *= sy;
+        return this;
+      }
+      
+      translateSelf(tx, ty) {
+        this.e += tx;
+        this.f += ty;
+        return this;
+      }
+      
+      invertSelf() {
+        const det = this.a * this.d - this.b * this.c;
+        if (det === 0) throw new Error('Matrix cannot be inverted');
+        
+        const a = this.a;
+        this.a = this.d / det;
+        this.d = a / det;
+        this.b = -this.b / det;
+        this.c = -this.c / det;
+        
+        const e = this.e;
+        const f = this.f;
+        this.e = (this.c * f - this.d * e) / det;
+        this.f = (this.b * e - this.a * f) / det;
+        
+        return this;
+      }
+      
+      multiplySelf(other) {
+        const a = this.a * other.a + this.c * other.b;
+        const b = this.b * other.a + this.d * other.b;
+        const c = this.a * other.c + this.c * other.d;
+        const d = this.b * other.c + this.d * other.d;
+        const e = this.a * other.e + this.c * other.f + this.e;
+        const f = this.b * other.e + this.d * other.f + this.f;
+        
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.d = d;
+        this.e = e;
+        this.f = f;
+        
+        return this;
+      }
+      
+      preMultiplySelf(other) {
+        return this.multiplySelf(other);
+      }
+    };
+  }
+}
 
 /**
  * Service to extract currency amounts from PDF files with ambiguity detection.
@@ -17,6 +102,7 @@ export default class ParserService {
     this._cache = null;
     this._aiDetection = new AIDetectionService();
     this._settings = new SettingsService();
+    this._logger = new LoggingService();
   }
 
   // Lazy-initialize cache to avoid accessing electron.app before it's ready
@@ -34,24 +120,49 @@ export default class ParserService {
    * @returns {Promise<Object>} - The extraction result object.
    */
   async extractAmount(filePath, options = {}) {
-    let parser = null;
+    const startTime = Date.now();
+    
+    this._logger.info(`Starting PDF extraction for: ${path.basename(filePath)}`);
+    
     try {
+      // Check if file exists and is readable
+      if (!fs.existsSync(filePath)) {
+        const error = new Error(`File not found: ${filePath}`);
+        this._logger.logPDFError(filePath, error, { phase: 'file_check' });
+        return { status: 'failed', amount: 0, candidates: [], message: error.message };
+      }
+
+      const stats = fs.statSync(filePath);
+      this._logger.info(`File stats: ${stats.size} bytes, modified: ${stats.mtime}`);
+
       const dataBuffer = fs.readFileSync(filePath);
-      parser = new PDFParse({ data: dataBuffer });
-      const data = await parser.getText();
+      this._logger.debug(`Buffer size: ${dataBuffer.length} bytes`);
+      
+      const data = await pdfParse(dataBuffer);
+      this._logger.debug(`PDF text extracted, length: ${data.text?.length || 0} characters`);
+      
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
       if (!text || text.trim().length < 50) {
-          console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
-          text = await this.performOCR(filePath);
+          this._logger.info(`Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR...`);
+          this._logger.logOCRAttempt(filePath, this.getPageCount(filePath), 1);
+          
+          try {
+            text = await this.performOCR(filePath);
+            this._logger.info(`OCR completed, extracted ${text.length} characters`);
+          } catch (ocrError) {
+            this._logger.logOCRFailure(filePath, ocrError, 1);
+            throw ocrError;
+          }
       }
 
       let result = this.findAmountInText(text, options.pattern);
+      this._logger.info(`Amount extraction result: ${result.status}, candidates: ${result.candidates?.length || 0}`);
       
       // AI Detection Fallback
       if (this._aiDetection.shouldUseFallback(result.status, this.getPageCount(filePath))) {
-        console.log(`[ParserService] OCR result: ${result.status}. Triggering AI detection fallback...`);
+        this._logger.info(`OCR result: ${result.status}. Triggering AI detection fallback...`);
         
         try {
           const aiSettings = this._settings.getAIDetectionSettings();
@@ -62,10 +173,11 @@ export default class ParserService {
             pageCount: this.getPageCount(filePath)
           };
           
+          this._logger.logAIDetectionAttempt(filePath, text.length);
           const aiResult = await this._aiDetection.extractAmountFromText(text, pdfContext);
           
           if (aiResult.status === 'success') {
-            console.log(`[ParserService] AI detection successful: ${aiResult.amount}`);
+            this._logger.logAIDetectionSuccess(filePath, aiResult.amount, aiResult.confidence || 'unknown');
             return {
               ...aiResult,
               method: 'ai',
@@ -73,7 +185,7 @@ export default class ParserService {
               originalResult: result
             };
           } else {
-            console.log(`[ParserService] AI detection failed: ${aiResult.message}`);
+            this._logger.logAIDetectionFailure(filePath, new Error(aiResult.message || 'AI detection failed'));
             return {
               ...result,
               method: 'ocr',
@@ -82,7 +194,7 @@ export default class ParserService {
             };
           }
         } catch (aiError) {
-          console.error(`[ParserService] AI detection error:`, aiError);
+          this._logger.logAIDetectionFailure(filePath, aiError);
           return {
             ...result,
             method: 'ocr',
@@ -92,18 +204,32 @@ export default class ParserService {
         }
       }
 
+      const duration = Date.now() - startTime;
+      this._logger.info(`PDF extraction completed in ${duration}ms with status: ${result.status}`);
+
       return {
         ...result,
         method: 'ocr',
         fallbackAttempted: false
       };
     } catch (error) {
-      console.error(`Error parsing PDF ${filePath}:`, error);
-      return { status: 'failed', amount: 0, candidates: [], message: error.message };
-    } finally {
-      if (parser) {
-        await parser.destroy();
-      }
+      const duration = Date.now() - startTime;
+      const context = {
+        phase: 'pdf_extraction',
+        duration: duration,
+        fileSize: fs.existsSync(filePath) ? fs.statSync(filePath).size : 0,
+        pdfParseVersion: require('pdf-parse/package.json').version
+      };
+      
+      this._logger.logPDFError(filePath, error, context);
+      
+      return { 
+        status: 'failed', 
+        amount: 0, 
+        candidates: [], 
+        message: error.message,
+        error: error.stack
+      };
     }
   }
 
@@ -115,16 +241,19 @@ export default class ParserService {
       // Check cache first
       const cachedText = this.cache.getOCRCache(filePath);
       if (cachedText) {
-          console.log(`[ParserService] Using cached OCR result (${cachedText.length} characters)`);
+          this._logger.info(`Using cached OCR result for ${path.basename(filePath)} (${cachedText.length} characters)`);
           return cachedText;
       }
 
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
+      this._logger.info(`Created temporary OCR directory: ${tempDir}`);
+      
       try {
           const baseName = path.basename(filePath, '.pdf');
           const outputPrefix = path.join(tempDir, 'page');
           
-          console.log(`[ParserService] Converting PDF to images in ${tempDir}...`);
+          this._logger.info(`Converting PDF to images for ${path.basename(filePath)}...`);
+          
           // Use pdftoppm (fast system tool) to convert PDF to PNG
           // We convert at 300 DPI for better OCR quality
           // On Windows, use bundled poppler binaries
@@ -138,28 +267,37 @@ export default class ParserService {
             
             // Validate binary exists
             if (!fs.existsSync(popplerPath)) {
-              throw new Error(`Poppler binary not found at ${popplerPath}. Please ensure poppler-windows is properly bundled.`);
+              const error = new Error(`Poppler binary not found at ${popplerPath}. Please ensure poppler-windows is properly bundled.`);
+              this._logger.error(`Poppler binary missing: ${popplerPath}`);
+              throw error;
             }
             
-            console.log(`[ParserService] Using poppler binary: ${popplerPath}`);
+            this._logger.info(`Using poppler binary: ${popplerPath}`);
             pdftoppmCommand = `"${popplerPath}"`;
           } else {
             // Use system pdftoppm on Linux/macOS
             pdftoppmCommand = 'pdftoppm';
+            this._logger.info('Using system pdftoppm command');
           }
           
-          execSync(`${pdftoppmCommand} -png -r 600 "${filePath}" "${outputPrefix}"`);
+          const convertCommand = `${pdftoppmCommand} -png -r 600 "${filePath}" "${outputPrefix}"`;
+          this._logger.debug(`Executing: ${convertCommand}`);
+          
+          execSync(convertCommand);
+          this._logger.info('PDF to image conversion completed');
 
           const files = fs.readdirSync(tempDir)
               .filter(f => f.startsWith('page') && f.endsWith('.png'))
               .sort();
 
+          this._logger.info(`Found ${files.length} page images to process`);
+
           let fullText = '';
-          console.log(`[ParserService] Running Tesseract OCR on ${files.length} pages...`);
           
-          for (const file of files) {
+          for (let i = 0; i < files.length; i++) {
+              const file = files[i];
               const imagePath = path.join(tempDir, file);
-              console.log(`[ParserService] Processing OCR for ${file}...`);
+              this._logger.info(`Processing OCR for page ${i + 1}/${files.length}: ${file}`);
               
               // Try multiple OCR approaches for better results
               let bestText = '';
@@ -206,7 +344,7 @@ export default class ParserService {
               
               for (const ocrConfig of ocrConfigs) {
                 try {
-                  console.log(`[ParserService] Trying OCR config: ${ocrConfig.name}`);
+                  this._logger.debug(`Trying OCR config: ${ocrConfig.name}`);
                   
                   const { data: { text: ocrText } } = await Tesseract.recognize(
                     imagePath,
@@ -219,7 +357,7 @@ export default class ParserService {
                   
                   // Assess OCR quality
                   const quality = this.assessOCRQuality(ocrText);
-                  console.log(`[ParserService] OCR config ${ocrConfig.name}: quality=${quality.score}, words=${quality.wordCount}, text="${ocrText.substring(0, 50)}${ocrText.length > 50 ? '...' : ''}"`);
+                  this._logger.debug(`OCR config ${ocrConfig.name}: quality=${quality.score}, words=${quality.wordCount}, text="${ocrText.substring(0, 50)}${ocrText.length > 50 ? '...' : ''}"`);
                   
                   if (quality.score > bestQuality) {
                     bestQuality = quality.score;
@@ -227,24 +365,24 @@ export default class ParserService {
                   }
                   
                 } catch (ocrError) {
-                  console.warn(`[ParserService] OCR config ${ocrConfig.name} failed:`, ocrError.message);
+                  this._logger.warn(`OCR config ${ocrConfig.name} failed for page ${i + 1}:`, ocrError.message);
                 }
               }
               
-              console.log(`[ParserService] Best OCR result for ${file}: "${bestText.substring(0, 100)}${bestText.length > 100 ? '...' : ''}" (${bestText.length} chars, quality=${bestQuality})`);
+              this._logger.info(`Best OCR result for page ${i + 1}: "${bestText.substring(0, 100)}${bestText.length > 100 ? '...' : ''}" (${bestText.length} chars, quality=${bestQuality})`);
               fullText += bestText + '\n';
           }
 
-          console.log(`[ParserService] OCR completed. Extracted ${fullText.length} characters.`);
+          this._logger.info(`OCR completed for ${path.basename(filePath)}. Extracted ${fullText.length} characters.`);
           
           // Validate OCR quality using the assessment method
           const quality = this.assessOCRQuality(fullText);
           
-          console.log(`[ParserService] OCR quality assessment: score=${quality.score}, words=${quality.wordCount}, hasNumbers=${quality.hasNumbers}, hasCurrency=${quality.hasCurrency}, hasAmountPattern=${quality.hasAmountPattern}`);
+          this._logger.info(`OCR quality assessment: score=${quality.score}, words=${quality.wordCount}, hasNumbers=${quality.hasNumbers}, hasCurrency=${quality.hasCurrency}, hasAmountPattern=${quality.hasAmountPattern}`);
           
           if (!quality.isAcceptable) {
-            console.warn('[ParserService] OCR quality is poor - text may not be suitable for AI analysis');
-            console.warn('[ParserService] OCR text sample:', fullText.replace(/\s+/g, ' ').trim().substring(0, 200));
+            this._logger.warn(`OCR quality is poor for ${path.basename(filePath)} - text may not be suitable for AI analysis`);
+            this._logger.warn(`OCR text sample:`, fullText.replace(/\s+/g, ' ').trim().substring(0, 200));
             
             // Provide suggestions for improvement
             const suggestions = [];
@@ -252,22 +390,24 @@ export default class ParserService {
             if (!quality.hasNumbers) suggestions.push('Ensure the document contains visible numbers');
             if (!quality.hasCurrency) suggestions.push('Check if currency symbols are present');
             
-            console.warn('[ParserService] Suggestions:', suggestions.join(', '));
+            this._logger.warn(`OCR suggestions: ${suggestions.join(', ')}`);
           }
           
           // Cache the result
           this.cache.setOCRCache(filePath, fullText);
+          this._logger.debug(`OCR result cached for ${path.basename(filePath)}`);
           
           return fullText;
       } catch (error) {
-          console.error('[ParserService] OCR failed:', error);
+          this._logger.error(`OCR failed for ${path.basename(filePath)}:`, error);
           throw new Error(`OCR failed: ${error.message}`);
       } finally {
           // Cleanup temp files
           try {
               fs.rmSync(tempDir, { recursive: true, force: true });
+              this._logger.debug(`Cleaned up temporary OCR directory: ${tempDir}`);
           } catch (e) {
-              console.warn(`[ParserService] Failed to cleanup temp dir ${tempDir}:`, e.message);
+              this._logger.warn(`Failed to cleanup temp dir ${tempDir}:`, e.message);
           }
       }
   }
@@ -279,20 +419,19 @@ export default class ParserService {
     try {
       // Try normal PDF text extraction first
       const dataBuffer = fs.readFileSync(filePath);
-      const parser = new PDFParse({ data: dataBuffer });
-      const data = await parser.getText();
+      const data = await pdfParse(dataBuffer);
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
       if (!text || text.trim().length < 50) {
-        console.log(`[ParserService] Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
+        this._logger.info(`Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR for AI analysis...`);
         text = await this.performOCR(filePath);
       }
 
-      console.log(`[ParserService] Extracted ${text.length} characters for AI analysis`);
+      this._logger.info(`Extracted ${text.length} characters for AI analysis`);
       return text;
     } catch (error) {
-      console.error('[ParserService] Failed to extract text for AI analysis:', error);
+      this._logger.error('Failed to extract text for AI analysis:', error);
       throw new Error(`Text extraction failed: ${error.message}`);
     }
   }

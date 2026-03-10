@@ -6,7 +6,7 @@ const api = {
   getProjects: () => ipcRenderer.invoke('get-projects'),
   saveProject: (project) => ipcRenderer.invoke('save-project', project),
   deleteProject: (projectId) => ipcRenderer.invoke('delete-project', projectId),
-  getExcelMetadata: (filePath, sheetName, categoryColumn, monthStartCell) => 
+  getExcelMetadata: (filePath, sheetName, categoryColumn, monthStartCell) =>
     ipcRenderer.invoke('get-excel-metadata', filePath, sheetName, categoryColumn, monthStartCell),
   runProject: (project) => ipcRenderer.invoke('run-project', project),
   finalizeProject: (project, summary) => ipcRenderer.invoke('finalize-project', project, summary),
@@ -29,6 +29,10 @@ const api = {
   // OCR cache management
   getCacheStats: () => ipcRenderer.invoke('get-cache-stats'),
   clearOCRCache: () => ipcRenderer.invoke('clear-ocr-cache'),
+  // Logging API
+  getLogFiles: () => ipcRenderer.invoke('get-log-files'),
+  exportLogs: () => ipcRenderer.invoke('export-logs'),
+  openLogDirectory: () => ipcRenderer.invoke('open-log-directory'),
   // AI Analysis API
   analyzeWithAI: (filePath, text) => ipcRenderer.invoke('analyze-with-ai', filePath, text),
   extractPDFText: (filePath) => ipcRenderer.invoke('extract-pdf-text', filePath)

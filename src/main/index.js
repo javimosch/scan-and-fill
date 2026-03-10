@@ -1,3 +1,128 @@
+// DOMMatrix polyfill for Node.js environment (must be before any imports)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  try {
+    // Try to use @napi-rs/canvas DOMMatrix if available
+    const canvas = require('@napi-rs/canvas')
+    if (canvas.DOMMatrix) {
+      globalThis.DOMMatrix = canvas.DOMMatrix
+    }
+  } catch (error) {
+    // Minimal DOMMatrix polyfill as fallback
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) {
+        if (typeof a === 'object') {
+          this.a = a.a || 1
+          this.b = a.b || 0
+          this.c = a.c || 0
+          this.d = a.d || 1
+          this.e = a.e || 0
+          this.f = a.f || 0
+        } else {
+          this.a = a
+          this.b = b
+          this.c = c
+          this.d = d
+          this.e = e
+          this.f = f
+        }
+      }
+
+      scaleSelf(sx, sy = sx) {
+        this.a *= sx
+        this.d *= sy
+        return this
+      }
+
+      translateSelf(tx, ty) {
+        this.e += tx
+        this.f += ty
+        return this
+      }
+
+      invertSelf() {
+        const det = this.a * this.d - this.b * this.c
+        if (det === 0) throw new Error('Matrix cannot be inverted')
+
+        const a = this.a
+        this.a = this.d / det
+        this.d = a / det
+        this.b = -this.b / det
+        this.c = -this.c / det
+
+        const e = this.e
+        const f = this.f
+        this.e = (this.c * f - this.d * e) / det
+        this.f = (this.b * e - this.a * f) / det
+
+        return this
+      }
+
+      multiplySelf(other) {
+        const a = this.a * other.a + this.c * other.b
+        const b = this.b * other.a + this.d * other.b
+        const c = this.a * other.c + this.c * other.d
+        const d = this.b * other.c + this.d * other.d
+        const e = this.a * other.e + this.c * other.f + this.e
+        const f = this.b * other.e + this.d * other.f + this.f
+
+        this.a = a
+        this.b = b
+        this.c = c
+        this.d = d
+        this.e = e
+        this.f = f
+
+        return this
+      }
+
+      preMultiplySelf(other) {
+        return this.multiplySelf(other)
+      }
+    }
+  }
+}
+
+// Additional browser API polyfills for pdf-parse
+if (typeof globalThis.Path2D === 'undefined') {
+  try {
+    const canvas = require('@napi-rs/canvas')
+    if (canvas.Path2D) {
+      globalThis.Path2D = canvas.Path2D
+    }
+  } catch (error) {
+    globalThis.Path2D = class Path2D {
+      constructor(path) {
+        this.path = path || ''
+      }
+      addPath(path, transform) {
+        // Minimal implementation
+      }
+    }
+  }
+}
+
+if (typeof globalThis.ImageData === 'undefined') {
+  try {
+    const canvas = require('@napi-rs/canvas')
+    if (canvas.ImageData) {
+      globalThis.ImageData = canvas.ImageData
+    }
+  } catch (error) {
+    globalThis.ImageData = class ImageData {
+      constructor(data, width, height) {
+        this.data = data
+        this.width = width
+        this.height = height
+      }
+    }
+  }
+}
+
+// Ensure global object is available
+if (typeof globalThis.global === 'undefined') {
+  globalThis.global = globalThis
+}
+
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -7,11 +132,16 @@ import MainService from './services/MainService.js'
 import SettingsService from './services/SettingsService.js'
 import ParserService from './services/ParserService.js'
 import CacheService from './services/CacheService.js'
+import LoggingService from './services/LoggingService.js'
+
+// Initialize logging first
+const logger = new LoggingService()
 
 const projectService = new ProjectService()
 const mainService = new MainService()
 const settingsService = new SettingsService()
 const parserService = new ParserService()
+const cacheService = new CacheService()
 
 // Register custom protocol for local files (PDF preview)
 protocol.registerSchemesAsPrivileged([
@@ -61,7 +191,7 @@ app.whenReady().then(() => {
     try {
       const parsed = new URL(request.url)
       let filePath = parsed.pathname
-      
+
       // On some systems/versions, standard schemes might parse the first path segment as hostname
       // e.g. app-file://home/user -> hostname='home', pathname='/user'
       // We need to reconstruct the absolute path
@@ -70,10 +200,10 @@ app.whenReady().then(() => {
       }
 
       filePath = decodeURIComponent(filePath)
-      
+
       // Handle Windows drive letters if needed (usually treated as pathname /C:/...)
       // pathToFileURL handles this if format is correct.
-      
+
       return net.fetch(pathToFileURL(filePath).toString())
     } catch (e) {
       console.error('[app-file] Protocol error:', e)
@@ -83,17 +213,17 @@ app.whenReady().then(() => {
 
   // Set app user model id for windows
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.javimosch.scan-and-fill');
+    app.setAppUserModelId('com.javimosch.scan-and-fill')
   }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   app.on('browser-window-created', (_, window) => {
     if (!app.isPackaged) {
-      window.webContents.openDevTools();
+      window.webContents.openDevTools()
     } else {
-       // Disable shortcuts in production if needed, or leave default
-       window.setMenu(null); 
+      // Disable shortcuts in production if needed, or leave default
+      window.setMenu(null)
     }
   })
 
@@ -101,8 +231,8 @@ app.whenReady().then(() => {
   ipcMain.handle('get-projects', () => projectService.getProjects())
   ipcMain.handle('save-project', (_, project) => projectService.saveProject(project))
   ipcMain.handle('delete-project', (_, projectId) => projectService.deleteProject(projectId))
-  
-  ipcMain.handle('get-excel-metadata', (_, filePath, sheetName, categoryColumn, monthStartCell) => 
+
+  ipcMain.handle('get-excel-metadata', (_, filePath, sheetName, categoryColumn, monthStartCell) =>
     mainService.getExcelMetadata(filePath, sheetName, categoryColumn, monthStartCell)
   )
 
@@ -148,11 +278,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('open-path', async (_, path) => {
     try {
-        await shell.openPath(path)
-        return { success: true }
+      await shell.openPath(path)
+      return { success: true }
     } catch (error) {
-        console.error('Failed to open path:', error)
-        return { success: false, error: error.message }
+      console.error('Failed to open path:', error)
+      return { success: false, error: error.message }
     }
   })
 
@@ -169,50 +299,74 @@ app.whenReady().then(() => {
     return settingsService.updateAIDetectionSettings(settings)
   })
 
+  // Logging IPC handlers
+  ipcMain.handle('get-log-files', () => {
+    return logger.getLogFiles()
+  })
+
+  ipcMain.handle('export-logs', async () => {
+    return await logger.exportLogs()
+  })
+
+  ipcMain.handle('open-log-directory', async () => {
+    try {
+      const errorMessage = await shell.openPath(logger.getLogFiles())
+      if (errorMessage) {
+        return { success: false, error: errorMessage }
+      }
+      return { success: true }
+    } catch (error) {
+      logger.error('Failed to open log directory:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('update-setting', (_, key, value) => {
     return settingsService.updateSetting(key, value)
   })
 
   ipcMain.handle('get-cache-stats', async () => {
     try {
-      const cache = new CacheService();
-      const stats = cache.getStats();
-      return stats;
+      const cache = new CacheService()
+      const stats = cache.getStats()
+      return stats
     } catch (error) {
-      console.error('Failed to get cache stats:', error);
-      throw error;
+      console.error('Failed to get cache stats:', error)
+      throw error
     }
-  });
+  })
 
   ipcMain.handle('clear-ocr-cache', async () => {
     try {
-      const cache = new CacheService();
-      await cache.clearOCRCacheJSON();
-      return { success: true };
+      const cache = new CacheService()
+      await cache.clearOCRCacheJSON()
+      return { success: true }
     } catch (error) {
-      console.error('Failed to clear OCR cache:', error);
-      throw error;
+      console.error('Failed to clear OCR cache:', error)
+      throw error
     }
-  });
+  })
 
   ipcMain.handle('analyze-with-ai', async (_, filePath, text) => {
     try {
       const aiSettings = settingsService.getAIDetectionSettings()
       const pageCount = parserService.getPageCount(filePath)
-      
+
       if (!aiSettings.enabled) {
         throw new Error('AI detection is disabled')
       }
-      
+
       if (pageCount > aiSettings.maxPages) {
-        throw new Error(`PDF has ${pageCount} pages, but AI is limited to ${aiSettings.maxPages} pages`)
+        throw new Error(
+          `PDF has ${pageCount} pages, but AI is limited to ${aiSettings.maxPages} pages`
+        )
       }
-      
+
       const pdfContext = {
         fileName: require('path').basename(filePath),
         pageCount
       }
-      
+
       return await parserService.manualAIAnalysis(text, pdfContext, aiSettings)
     } catch (error) {
       console.error('Manual AI analysis failed:', error)

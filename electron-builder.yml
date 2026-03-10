@@ -13,6 +13,7 @@ files:
 asarUnpack:
   - resources/**
   - build/poppler-windows/**
+  - node_modules/@napi-rs/canvas-*/
 win:
   executableName: scan-and-fill
   target:
@@ -45,7 +46,7 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+npmRebuild: true
 publish:
   provider: generic
   url: https://example.com/auto-updates
