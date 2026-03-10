@@ -6,7 +6,7 @@ export function scanUploadedFiles(pdfFiles, categoryMapping = {}, monthFilter = 
   const filterInfo = monthFilter ? identifyMonth(monthFilter) : null;
 
   for (const file of pdfFiles) {
-    const relativePath = file.originalname;
+    const relativePath = file.relativePath || file.originalname;
     const parts = relativePath.split(/[\\/]/).filter(Boolean);
     if (parts.length < 3) continue;
 
