@@ -63,6 +63,13 @@ app.post('/api/v1/run', upload.array('pdfFiles', 500), async (req, res) => {
       return res.status(400).json(errorEnvelope('MISSING_PDFS', 'At least one PDF is required'));
     }
 
+    // Multer strips path separators from filenames, so we receive the
+    // relative paths (month/category/file.pdf) as a separate JSON field.
+    const paths = parseJsonBody(req.body.paths, []);
+    for (let i = 0; i < pdfFiles.length; i++) {
+      pdfFiles[i].relativePath = paths[i] || pdfFiles[i].originalname;
+    }
+
     const summary = await runProject({ project, pdfFiles });
     return res.json({ summary });
   } catch (error) {

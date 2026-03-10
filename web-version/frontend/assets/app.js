@@ -302,9 +302,12 @@ createApp({
         pdfCount.value = pdfFiles.length;
 
         const form = new FormData();
+        const paths = [];
         for (const file of pdfFiles) {
           form.append('pdfFiles', file.blob, file.relativePath);
+          paths.push(file.relativePath);
         }
+        form.append('paths', JSON.stringify(paths));
         form.append('project', JSON.stringify(execProject.value));
 
         const serverUrl = state.value.serverUrl || '';
