@@ -1,0 +1,15 @@
+http:
+  routers:
+    scanfillweb-rbm:
+      entryPoints:
+        - https
+      service: scanfillweb-rbm
+      rule: Host(`scanfillweb.intrane.fr`)
+      tls:
+        certresolver: letsencrypt
+  services:
+    scanfillweb-rbm:
+      loadBalancer:
+        servers:
+          -
+            url: 'http://100.86.93.41:3087'
