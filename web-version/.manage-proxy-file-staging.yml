@@ -1,0 +1,15 @@
+http:
+  routers:
+    scanfillweb-staging:
+      entryPoints:
+        - https
+      service: scanfillweb-staging
+      rule: Host(`https://scanfillweb.intrane.fr`)
+      tls:
+        certresolver: letsencrypt
+  services:
+    scanfillweb-staging:
+      loadBalancer:
+        servers:
+          -
+            url: 'http://scanfillweb:3000'
