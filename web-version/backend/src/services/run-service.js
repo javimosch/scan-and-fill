@@ -57,12 +57,16 @@ export async function runProject({ project, pdfFiles }) {
           summary.stats.done += 1;
         } else if (result.status === 'ambiguous') {
           summary.stats.ambiguous += 1;
-          const nums = (result.candidates || []).map(c => typeof c === 'object' ? c.amount : c);
-          summary.conflicts.push({ ...fileInfo, type: 'ambiguity', candidates: nums });
+          const candidates = (result.candidates || []).map(c =>
+            typeof c === 'object' ? { amount: c.amount, context: c.context || '' } : { amount: c, context: '' }
+          );
+          summary.conflicts.push({ ...fileInfo, type: 'ambiguity', candidates });
         } else {
           summary.stats.failed += 1;
-          const nums = (result.candidates || []).map(c => typeof c === 'object' ? c.amount : c);
-          summary.conflicts.push({ ...fileInfo, type: 'failure', candidates: nums });
+          const candidates = (result.candidates || []).map(c =>
+            typeof c === 'object' ? { amount: c.amount, context: c.context || '' } : { amount: c, context: '' }
+          );
+          summary.conflicts.push({ ...fileInfo, type: 'failure', candidates });
         }
       }
       summary.totals[monthName][categoryName] = categoryTotal;
