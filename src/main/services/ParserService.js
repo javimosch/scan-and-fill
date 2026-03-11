@@ -269,6 +269,9 @@ export default class ParserService {
             if (!fs.existsSync(popplerPath)) {
               const error = new Error(`Poppler binary not found at ${popplerPath}. Please ensure poppler-windows is properly bundled.`);
               this._logger.error(`Poppler binary missing: ${popplerPath}`);
+              this._logger.error(`Current working directory: ${process.cwd()}`);
+              this._logger.error(`Resources path: ${process.resourcesPath}`);
+              this._logger.error(`Is packaged: ${app.isPackaged}`);
               throw error;
             }
             
