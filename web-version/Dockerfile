@@ -1,0 +1,27 @@
+FROM node:20-slim
+
+# Install system dependencies
+# poppler-utils for pdftoppm
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the entire web-version folder structure
+# We assume this is run from the web-version directory
+COPY . .
+
+# Install backend dependencies
+WORKDIR /app/backend
+RUN npm install
+
+# Expose the default backend port (3000)
+EXPOSE 3000
+
+# Set environment variables
+ENV PORT=3000
+ENV NODE_ENV=production
+
+# Start the application from the backend directory
+CMD ["npm", "start"]
