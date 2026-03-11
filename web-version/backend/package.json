@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "image:deploy": "cd .. && docker build -t javimosch/scanfillweb:latest . && docker push javimosch/scanfillweb:latest"
+    "image:deploy": "cd .. && docker build -t javimosch/scanfillweb:latest . && docker push javimosch/scanfillweb:latest",
+    "image:deploy:arm64": "cd .. && docker buildx build --platform linux/arm64 -t javimosch/scanfillweb:latest-arm64 -f Dockerfile.arm --push ."
   },
   "dependencies": {
     "cors": "^2.8.5",
