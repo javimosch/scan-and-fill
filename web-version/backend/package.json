@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "image:deploy": "cd .. && docker build -t javimosch/scanfillweb:latest . && docker push javimosch/scanfillweb:latest"
   },
   "dependencies": {
     "cors": "^2.8.5",
