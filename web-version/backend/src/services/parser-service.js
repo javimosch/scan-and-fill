@@ -333,6 +333,15 @@ async function performOcr(pdfBuffer) {
     const pngFiles = fs.readdirSync(tempDir).filter((f) => f.startsWith('page') && f.endsWith('.png')).sort();
     console.log('[ocr] Found ' + pngFiles.length + ' page images to process');
 
+    for (const pngFile of pngFiles) {
+      const imgPath = path.join(tempDir, pngFile);
+      try {
+        execSync(`convert "${imgPath}" -colorspace Gray -normalize -level 10%,85% -sharpen 0x1 "${imgPath}"`, { timeout: 15000 });
+      } catch (e) {
+        console.warn('[ocr] ImageMagick preprocessing failed for ' + pngFile + ': ' + e.message);
+      }
+    }
+
     workerOem3 = await Tesseract.createWorker('fra+eng', 3);
     workerOem1 = await Tesseract.createWorker('fra+eng', 1);
 
