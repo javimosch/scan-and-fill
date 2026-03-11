@@ -1,6 +1,45 @@
 import { scanUploadedFiles } from './scanner-service.js';
 import { extractAmountFromPdfBuffer } from './parser-service.js';
 
+export async function extractSingleFile({ project, pdfFile, relativePath }) {
+  const parts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
+
+  let month, categoryFolder, fileName;
+  if (parts.length >= 3) {
+    month = parts[0];
+    categoryFolder = parts[1];
+    fileName = parts.slice(2).join('/');
+  } else if (parts.length === 2) {
+    month = parts[0];
+    categoryFolder = '';
+    fileName = parts[1];
+  } else {
+    month = 'Unknown';
+    categoryFolder = '';
+    fileName = parts[0] || 'unknown.pdf';
+  }
+
+  const categoryMapping = project?.categoryMapping || {};
+  const category = categoryMapping[categoryFolder] || categoryFolder || 'Uncategorized';
+
+  const result = await extractAmountFromPdfBuffer(pdfFile.buffer);
+
+  const candidates = (result.candidates || []).map(c =>
+    typeof c === 'object' ? { amount: c.amount, context: c.context || '' } : { amount: c, context: '' }
+  );
+
+  return {
+    month,
+    category,
+    fileName,
+    filePath: relativePath,
+    status: result.status,
+    amount: result.amount || 0,
+    message: result.message || '',
+    candidates
+  };
+}
+
 export async function runProject({ project, pdfFiles }) {
   // eslint-disable-next-line no-console
   console.log(`[run] Processing ${pdfFiles.length} files for project "${project?.name || 'unnamed'}"`);

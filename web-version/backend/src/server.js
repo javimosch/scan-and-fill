@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { rateLimitByHostname } from './middleware/rate-limit-by-hostname.js';
 import { getSpreadsheetMetadata, applySummaryToSpreadsheet } from './services/excel-service.js';
-import { runProject } from './services/run-service.js';
+import { runProject, extractSingleFile } from './services/run-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +52,20 @@ app.post('/api/v1/excel/metadata', upload.single('spreadsheet'), async (req, res
     return res.json({ metadata });
   } catch (error) {
     return res.status(500).json(errorEnvelope('METADATA_FAILED', error.message));
+  }
+});
+
+app.post('/api/v1/extract-single', upload.single('pdfFile'), async (req, res) => {
+  try {
+    const project = parseJsonBody(req.body.project, {});
+    const relativePath = req.body.relativePath || req.file?.originalname || '';
+    if (!req.file) {
+      return res.status(400).json(errorEnvelope('MISSING_PDF', 'PDF file is required'));
+    }
+    const result = await extractSingleFile({ project, pdfFile: req.file, relativePath });
+    return res.json({ result });
+  } catch (error) {
+    return res.status(500).json(errorEnvelope('EXTRACT_FAILED', error.message));
   }
 });
 
