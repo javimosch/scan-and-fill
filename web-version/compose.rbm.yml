@@ -1,15 +1,16 @@
 services:
   app:
-    image: javimosch/scanfillweb:latest
+    platform: linux/arm64
+    image: javimosch/scanfillweb:latest-arm64
     container_name: scanfillweb
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '3087:3000'
     volumes:
       - ./backend:/app/backend
       - ./frontend:/app/frontend
     env_file:
-      - .env
+      - .env.rbm
     environment:
       - PORT=3000
       - NODE_ENV=production
