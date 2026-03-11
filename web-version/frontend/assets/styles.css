@@ -563,6 +563,58 @@ body {
 .font-mono { font-family: 'SF Mono', 'Fira Code', monospace; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* --- Shortcuts overlay --- */
+.shortcuts-panel {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+  animation: modalIn 200ms ease;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.shortcut-row:last-child { border-bottom: none; }
+.shortcut-row kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 70px;
+  justify-content: center;
+}
+.shortcut-row span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* --- Last entry hint --- */
+.last-entry-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--primary-light);
+  border: 1px dashed rgba(124, 58, 237, 0.25);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.last-entry-hint:hover { background: rgba(124, 58, 237, 0.12); border-color: var(--primary); }
+
 /* --- Language selector --- */
 .lang-select {
   appearance: none;

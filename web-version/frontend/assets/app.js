@@ -5,6 +5,7 @@ const { createApp, ref, computed, onMounted } = Vue;
 const STORAGE_KEY = 'scan-and-fill-web-state-v1';
 const HANDLE_DB_NAME = 'scan-and-fill-handles';
 const SCAN_CACHE_DB = 'scan-and-fill-scan-cache';
+const LAST_MANUAL_KEY = 'scan-and-fill-last-manual';
 
 createApp({
   setup() {
@@ -32,6 +33,9 @@ createApp({
     const showPdf = ref(true);
     const pdfLoading = ref(false);
     const scanCacheTimestamp = ref(null);
+    const scanProgress = ref({ current: 0, total: 0, currentFile: '' });
+    const lastManualEntry = ref((() => { try { return localStorage.getItem(LAST_MANUAL_KEY) || ''; } catch { return ''; } })());
+    const showShortcuts = ref(false);
     const lang = ref(getStoredLang());
 
     function t(key, params) {
@@ -333,44 +337,104 @@ createApp({
       }
     }
 
-    async function runScan() {
+    async function runScan(clearResolutions) {
       isRunning.value = true;
       error.value = '';
-      runResult.value = null;
       execStep.value = 'scanning';
+      scanProgress.value = { current: 0, total: 0, currentFile: '' };
+
+      const oldResolutions = new Map();
+      if (!clearResolutions && runResult.value) {
+        for (const c of (runResult.value.conflicts || [])) {
+          if (c.resolvedAmount !== undefined) oldResolutions.set(c.filePath, c.resolvedAmount);
+        }
+        for (const f of (runResult.value.files || [])) {
+          if (f.resolvedAmount !== undefined) oldResolutions.set(f.filePath, f.resolvedAmount);
+        }
+      }
+      runResult.value = null;
+
       try {
         const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey);
         if (!folderHandle) throw new Error(t('execution.connectFolderFirst'));
         const pdfFiles = await gatherPdfFiles(folderHandle);
         if (pdfFiles.length === 0) throw new Error(t('execution.noPdfsFound'));
         pdfCount.value = pdfFiles.length;
+        scanProgress.value.total = pdfFiles.length;
 
-        const form = new FormData();
-        const paths = [];
-        for (const file of pdfFiles) {
-          form.append('pdfFiles', file.blob, file.relativePath);
-          paths.push(file.relativePath);
-        }
-        form.append('paths', JSON.stringify(paths));
-        form.append('project', JSON.stringify(execProject.value));
+        const summary = {
+          project: execProject.value.name || 'Unnamed',
+          files: [],
+          totals: {},
+          conflicts: [],
+          stats: { done: 0, skipped: 0, failed: 0, ambiguous: 0, total: pdfFiles.length }
+        };
 
         const serverUrl = state.value.serverUrl || '';
-        const response = await fetch(serverUrl + '/api/v1/run', { method: 'POST', body: form });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error?.message || 'Run failed');
-        runResult.value = payload.summary;
-        scanCacheTimestamp.value = Date.now();
-        saveScanCache(execProject.value.id, payload.summary).catch(() => {});
-        if (payload.summary.conflicts && payload.summary.conflicts.length > 0) {
-          execStep.value = 'resolve';
-        } else {
-          execStep.value = 'finalize';
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const file = pdfFiles[i];
+          scanProgress.value.current = i + 1;
+          scanProgress.value.currentFile = file.relativePath.split('/').pop();
+
+          try {
+            const form = new FormData();
+            form.append('pdfFile', file.blob, file.relativePath);
+            form.append('relativePath', file.relativePath);
+            form.append('project', JSON.stringify(execProject.value));
+            const response = await fetch(serverUrl + '/api/v1/extract-single', { method: 'POST', body: form });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error?.message || 'Extract failed');
+
+            const r = payload.result;
+            const fileInfo = { month: r.month, category: r.category, fileName: r.fileName, filePath: r.filePath, status: r.status, amount: r.amount || 0, message: r.message };
+            summary.files.push(fileInfo);
+            if (!summary.totals[r.month]) summary.totals[r.month] = {};
+            if (!summary.totals[r.month][r.category]) summary.totals[r.month][r.category] = 0;
+
+            if (r.status === 'success') {
+              summary.totals[r.month][r.category] += r.amount;
+              summary.stats.done += 1;
+            } else if (r.status === 'ambiguous') {
+              summary.stats.ambiguous += 1;
+              summary.conflicts.push({ ...fileInfo, type: 'ambiguity', candidates: r.candidates || [] });
+            } else {
+              summary.stats.failed += 1;
+              summary.conflicts.push({ ...fileInfo, type: 'failure', candidates: r.candidates || [] });
+            }
+          } catch (e) {
+            const failName = file.relativePath.split('/').pop();
+            summary.files.push({ month: 'Unknown', category: 'Unknown', fileName: failName, filePath: file.relativePath, status: 'failed', amount: 0, message: e.message });
+            summary.stats.failed += 1;
+          }
         }
+
+        if (oldResolutions.size > 0) {
+          for (const conflict of summary.conflicts) {
+            const oldAmt = oldResolutions.get(conflict.filePath);
+            if (oldAmt !== undefined) {
+              conflict.resolvedAmount = oldAmt;
+              const fi = summary.files.findIndex(f => f.filePath === conflict.filePath);
+              if (fi !== -1) { summary.files[fi].resolvedAmount = oldAmt; summary.files[fi].status = 'resolved'; }
+            }
+          }
+          for (const file of summary.files) {
+            if (file.status === 'success' && oldResolutions.has(file.filePath)) {
+              file.resolvedAmount = oldResolutions.get(file.filePath);
+            }
+          }
+        }
+
+        runResult.value = summary;
+        scanCacheTimestamp.value = Date.now();
+        saveScanCache(execProject.value.id, summary).catch(() => {});
+        const hasUnresolved = summary.conflicts.some(c => c.resolvedAmount === undefined);
+        execStep.value = (summary.conflicts.length > 0 && hasUnresolved) ? 'resolve' : 'finalize';
       } catch (e) {
         showError(e.message);
         execStep.value = 'ready';
       } finally {
         isRunning.value = false;
+        scanProgress.value = { current: 0, total: 0, currentFile: '' };
       }
     }
 
@@ -379,7 +443,7 @@ createApp({
       if (execProject.value) {
         clearScanCache(execProject.value.id).catch(() => {});
       }
-      await runScan();
+      await runScan(true);
     }
 
     async function openConflictModal(idx) {
@@ -389,7 +453,7 @@ createApp({
       if (conflict && conflict.resolvedAmount !== undefined) {
         conflictManualAmount.value = String(conflict.resolvedAmount);
       } else {
-        conflictManualAmount.value = '';
+        conflictManualAmount.value = lastManualEntry.value || '';
       }
       await loadPdfForConflict();
     }
@@ -446,6 +510,17 @@ createApp({
     }
 
     function onKeydown(e) {
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        const tag = (e.target?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        e.preventDefault();
+        showShortcuts.value = !showShortcuts.value;
+        return;
+      }
+      if (showShortcuts.value && e.key === 'Escape') {
+        showShortcuts.value = false;
+        return;
+      }
       if (conflictIdx.value === null) return;
       if (e.key === 'Escape') closeConflictModal();
       if (e.key === 'Enter' && (conflictSelectedAmount.value || conflictManualAmount.value)) {
@@ -470,6 +545,11 @@ createApp({
       const val = conflictManualAmount.value || conflictSelectedAmount.value;
       const amount = evaluateAmountExpression(val);
       if (isNaN(amount)) { showError(t('conflict.invalidAmount')); return; }
+
+      if (conflictManualAmount.value) {
+        lastManualEntry.value = String(amount);
+        try { localStorage.setItem(LAST_MANUAL_KEY, String(amount)); } catch {}
+      }
 
       const conflict = runResult.value.conflicts[conflictIdx.value];
       conflict.resolvedAmount = amount;
@@ -534,7 +614,7 @@ createApp({
       error, successMsg, importText, showAdvanced, excelMetadata, loadingMetadata,
       newFolderName, showAddMapping, pdfCount, conflictIdx, conflictSelectedAmount,
       conflictManualAmount, execStep, pdfBlobUrl, pdfZoom, showPdf, pdfLoading,
-      scanCacheTimestamp, lang,
+      scanCacheTimestamp, scanProgress, lastManualEntry, showShortcuts, lang,
       projects, currentConflict, unresolvedConflicts,
       allResolved, groupedResults, finalizeTotals, grandTotal, metadataCategories,
       metadataMonths, metadataTabs, openSections, toggleSection, isSectionOpen,
@@ -557,6 +637,7 @@ createApp({
         <div class="text-xs text-muted">{{ t('header.subtitle') }}</div>
       </div>
       <div style="display:flex;align-items:center;gap:0.75rem">
+        <button class="btn btn-ghost btn-sm" @click="showShortcuts = true" title="Keyboard shortcuts (?)" style="font-size:1rem;padding:0.3rem 0.5rem">\u2328</button>
         <select class="lang-select" :value="lang" @change="setLang($event.target.value)">
           <option value="en">EN</option>
           <option value="fr">FR</option>
@@ -788,6 +869,13 @@ createApp({
         <div class="spinner spinner-lg" style="margin-bottom:1rem"></div>
         <p style="font-size:1.1rem;font-weight:600">{{ t('execution.processing', { count: pdfCount }) }}</p>
         <p class="text-sm text-muted">{{ t('execution.processingHint') }}</p>
+        <div v-if="scanProgress.total > 0" style="margin-top:1.5rem;max-width:500px;margin-left:auto;margin-right:auto">
+          <div class="progress-bar" style="height:10px">
+            <div class="progress-fill" :style="{ width: Math.round(scanProgress.current / scanProgress.total * 100) + '%' }"></div>
+          </div>
+          <p class="text-sm" style="margin-top:0.5rem;font-weight:600">{{ scanProgress.current }} {{ t('execution.progressOf') }} {{ scanProgress.total }}</p>
+          <p class="text-xs text-muted" style="margin-top:0.25rem">{{ scanProgress.currentFile }}</p>
+        </div>
       </div>
 
       <!-- Results -->
@@ -888,6 +976,22 @@ createApp({
     </div>
   </div>
 
+  <!-- ==================== KEYBOARD SHORTCUTS ==================== -->
+  <div v-if="showShortcuts" class="modal-overlay" @click.self="showShortcuts = false" style="z-index:1100">
+    <div class="shortcuts-panel">
+      <div class="flex-between mb-4">
+        <h3 style="margin:0;font-size:1.1rem;font-weight:700">\u2328 {{ t('shortcuts.title') }}</h3>
+        <button class="btn btn-ghost btn-sm" @click="showShortcuts = false">\u2715</button>
+      </div>
+      <div>
+        <div class="shortcut-row"><kbd>Enter</kbd><span>{{ t('shortcuts.enter') }}</span></div>
+        <div class="shortcut-row"><kbd>Escape</kbd><span>{{ t('shortcuts.escape') }}</span></div>
+        <div class="shortcut-row"><kbd>?</kbd><span>{{ t('shortcuts.question') }}</span></div>
+        <div class="shortcut-row"><kbd>Ctrl+Scroll</kbd><span>{{ t('shortcuts.ctrlScroll') }}</span></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== CONFLICT MODAL ==================== -->
   <div v-if="conflictIdx !== null && currentConflict" class="modal-overlay" @click.self="closeConflictModal">
     <div class="conflict-modal" :class="{'conflict-modal--with-pdf': showPdf && pdfBlobUrl}">
@@ -974,6 +1078,11 @@ createApp({
             <!-- Manual entry -->
             <div class="mb-2">
               <div class="section-title">{{ t('conflict.manualEntry') }}</div>
+              <div v-if="lastManualEntry" class="last-entry-hint" @click="conflictManualAmount = lastManualEntry; conflictSelectedAmount = ''">
+                <span style="color:var(--primary);font-weight:600">{{ t('conflict.lastEntry') }}:</span>
+                <span style="font-weight:700;font-size:0.95rem">{{ lastManualEntry }}</span>
+                <span class="text-xs text-muted" style="margin-left:auto">{{ t('conflict.lastEntryClick') }}</span>
+              </div>
               <input class="form-input" type="text" inputmode="decimal" placeholder="0.00"
                 v-model="conflictManualAmount" @input="conflictSelectedAmount = ''" style="font-size:1.15rem;font-weight:700;padding:0.75rem" />
               <p class="text-xs text-muted" style="margin-top:0.35rem;font-style:italic">{{ t('conflict.sumHint') }}</p>

@@ -80,6 +80,7 @@ const locales = {
       startScan: '\u25B6 Start Scan',
       processing: 'Processing {count} files...',
       processingHint: 'This may take a moment depending on file count and size.',
+      progressOf: 'of',
       extracted: 'extracted',
       ambiguous: 'ambiguous',
       failed: 'failed',
@@ -116,12 +117,21 @@ const locales = {
       apply: '\u2713 Apply',
       invalidAmount: 'Please enter a valid amount',
       zoomHint: 'Ctrl + scroll to zoom',
-      sumHint: 'Use + to add amounts (e.g. 11.91+2155.76)'
+      sumHint: 'Use + to add amounts (e.g. 11.91+2155.76)',
+      lastEntry: 'Last entry',
+      lastEntryClick: 'Click to use'
     },
     language: {
       label: 'Language',
       en: 'English',
       fr: 'Français'
+    },
+    shortcuts: {
+      title: 'Keyboard Shortcuts',
+      enter: 'Apply amount & next conflict',
+      escape: 'Close dialog',
+      question: 'Toggle shortcuts help',
+      ctrlScroll: 'Zoom PDF preview'
     },
     cache: {
       justNow: 'just now',
@@ -208,6 +218,7 @@ const locales = {
       startScan: '\u25B6 Lancer le Scan',
       processing: 'Traitement de {count} fichiers...',
       processingHint: 'Cela peut prendre un moment selon le nombre et la taille des fichiers.',
+      progressOf: 'sur',
       extracted: 'extraits',
       ambiguous: 'ambigus',
       failed: 'échoués',
@@ -244,12 +255,21 @@ const locales = {
       apply: '\u2713 Appliquer',
       invalidAmount: 'Veuillez entrer un montant valide',
       zoomHint: 'Ctrl + molette pour zoomer',
-      sumHint: 'Utilisez + pour additionner (ex: 11.91+2155.76)'
+      sumHint: 'Utilisez + pour additionner (ex: 11.91+2155.76)',
+      lastEntry: 'Dernière saisie',
+      lastEntryClick: 'Cliquer pour utiliser'
     },
     language: {
       label: 'Langue',
       en: 'English',
       fr: 'Français'
+    },
+    shortcuts: {
+      title: 'Raccourcis Clavier',
+      enter: 'Appliquer le montant & conflit suivant',
+      escape: 'Fermer la boîte de dialogue',
+      question: 'Afficher/masquer les raccourcis',
+      ctrlScroll: 'Zoomer l\'aperçu PDF'
     },
     cache: {
       justNow: 'à l\'instant',
