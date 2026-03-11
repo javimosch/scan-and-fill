@@ -37,24 +37,26 @@ function findAmountInText(text, customPattern) {
   const lines = text.split('\n');
 
   const supremeKeywords = [
-    'total ttc', 'ttc', 'net a payer', 'net à payer', 'total à payer', 'total a payer',
-    'net à régler', 'net a régler', 'à payer', 'a payer', 'total à régler', 'total a régler',
-    'net a payer en €', 'net à payer en €', 'montant ttc', 'total eur ttc', 'total eur',
-    'a votre debit', 'total net a payer', 'total net ttc', 'net a payer ttc',
-    'net a payer ttc en euros', 'net à payer ttc en euros'
+    'total ht', 'net ht', 'hors taxe', 'total net ht', 'montant ht',
+    'total ht net', 'total marchandise', 'total hors taxe', 'sous-total ht',
+    'sous total ht', 'base ht', 'montant hors taxe'
   ];
   const strongKeywords = [
     'total due', 'amount due', 'balance due', 'total facturado', 'total factura',
     'total general', 'amount', 'montant', 'importe', 'sum', 'total:',
-    'payer', 'regler'
+    'payer', 'regler', 'net a payer', 'net à payer', 'total à payer', 'total a payer',
+    'à payer', 'a payer', 'a votre debit'
   ];
   const secondaryKeywords = [
-    'total ht', 'net ht', 'hors taxe', 'total net ht', 'ht', 'total ht net', 'total marchandise'
+    'total ttc', 'ttc', 'montant ttc', 'total eur ttc', 'total eur',
+    'net a payer ttc', 'total net ttc', 'net à régler', 'net a régler',
+    'total à régler', 'total a régler', 'net a payer en €', 'net à payer en €',
+    'net a payer ttc en euros', 'net à payer ttc en euros'
   ];
   const genericKeywords = [
-    'total', 'net'
+    'total', 'net', 'ht'
   ];
-  const subtotalKeywords = [...secondaryKeywords];
+  const subtotalKeywords = [];
 
   const ignoreWords = [
     'poids', 'weight', 'kg', 'volume', 'qty', 'quantité', 'quantity', 'qte', 'quantite',
@@ -162,9 +164,9 @@ function findAmountInText(text, customPattern) {
 
     const sorted = [...bestPool].sort((a, b) => b.amount - a.amount);
     if (sorted.length >= 3) {
-      const sumOfOthers = sorted[1].amount + sorted[2].amount;
-      if (Math.abs(sorted[0].amount - sumOfOthers) < 0.05) {
-        return { status: 'success', amount: sorted[0].amount, candidates: [sorted[0]], message: 'Amount extracted (HT+TVA=TTC)' };
+      const sumOfSmaller = sorted[1].amount + sorted[2].amount;
+      if (Math.abs(sorted[0].amount - sumOfSmaller) < 0.05) {
+        return { status: 'success', amount: sorted[1].amount, candidates: [sorted[1]], message: 'Amount extracted (HT from HT+TVA=TTC)' };
       }
     }
 
@@ -256,38 +258,37 @@ function extractAllNumbersWithContext(scanText) {
 const OCR_CONFIGS = [
   {
     name: 'enhanced_french',
-    languages: 'fra+eng',
-    config: {
-      tessedit_ocr_engine_mode: 3,
-      tessedit_pageseg_mode: 6,
+    oem: 3,
+    params: {
+      tessedit_pageseg_mode: '6',
       preserve_interword_spaces: '1',
-      tessedit_char_whitelist: '0123456789.,€$£ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzàâäéèêëïîôöùûüÿç'
+      tessedit_char_whitelist: '0123456789.,€$£ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzàâäéèêëïîôöùûüÿç '
     }
   },
   {
     name: 'standard_french',
-    languages: 'fra+eng',
-    config: {
-      tessedit_ocr_engine_mode: 3,
-      tessedit_pageseg_mode: 3,
-      preserve_interword_spaces: '1'
+    oem: 3,
+    params: {
+      tessedit_pageseg_mode: '3',
+      preserve_interword_spaces: '1',
+      tessedit_char_whitelist: ''
     }
   },
   {
     name: 'auto_layout',
-    languages: 'fra+eng',
-    config: {
-      tessedit_ocr_engine_mode: 3,
-      tessedit_pageseg_mode: 1,
-      preserve_interword_spaces: '1'
+    oem: 3,
+    params: {
+      tessedit_pageseg_mode: '1',
+      preserve_interword_spaces: '1',
+      tessedit_char_whitelist: ''
     }
   },
   {
     name: 'basic_french',
-    languages: 'fra+eng',
-    config: {
-      tessedit_ocr_engine_mode: 1,
-      tessedit_pageseg_mode: 6
+    oem: 1,
+    params: {
+      tessedit_pageseg_mode: '6',
+      tessedit_char_whitelist: ''
     }
   }
 ];
@@ -324,10 +325,16 @@ async function performOcr(pdfBuffer) {
   const outputPrefix = path.join(tempDir, 'page');
   fs.writeFileSync(pdfPath, pdfBuffer);
 
+  let workerOem3 = null;
+  let workerOem1 = null;
+
   try {
     execSync(`pdftoppm -png -r 600 "${pdfPath}" "${outputPrefix}"`);
     const pngFiles = fs.readdirSync(tempDir).filter((f) => f.startsWith('page') && f.endsWith('.png')).sort();
     console.log('[ocr] Found ' + pngFiles.length + ' page images to process');
+
+    workerOem3 = await Tesseract.createWorker('fra+eng', 3);
+    workerOem1 = await Tesseract.createWorker('fra+eng', 1);
 
     let fullText = '';
     for (let i = 0; i < pngFiles.length; i++) {
@@ -337,14 +344,9 @@ async function performOcr(pdfBuffer) {
 
       for (const ocrConfig of OCR_CONFIGS) {
         try {
-          const { data: { text: ocrText } } = await Tesseract.recognize(
-            imagePath,
-            ocrConfig.languages,
-            {
-              logger: () => {},
-              ...ocrConfig.config
-            }
-          );
+          const worker = ocrConfig.oem === 1 ? workerOem1 : workerOem3;
+          await worker.setParameters(ocrConfig.params);
+          const { data: { text: ocrText } } = await worker.recognize(imagePath);
 
           const quality = assessOCRQuality(ocrText);
           console.log('[ocr] config ' + ocrConfig.name + ' page ' + (i + 1) + ': score=' + quality.score + ' words=' + quality.wordCount);
@@ -353,6 +355,8 @@ async function performOcr(pdfBuffer) {
             bestQuality = quality.score;
             bestText = ocrText;
           }
+
+          if (quality.score > 100) break;
         } catch (ocrError) {
           console.warn('[ocr] config ' + ocrConfig.name + ' failed for page ' + (i + 1) + ': ' + ocrError.message);
         }
@@ -371,6 +375,8 @@ async function performOcr(pdfBuffer) {
 
     return fullText;
   } finally {
+    if (workerOem3) await workerOem3.terminate().catch(() => {});
+    if (workerOem1) await workerOem1.terminate().catch(() => {});
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
