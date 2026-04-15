@@ -1,137 +1,150 @@
-import { getStoredLang, setStoredLang, translate } from './i18n.js';
+import { getStoredLang, setStoredLang, translate } from './i18n.js'
 
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, onMounted } = Vue
 
-const STORAGE_KEY = 'scan-and-fill-web-state-v1';
-const HANDLE_DB_NAME = 'scan-and-fill-handles';
-const SCAN_CACHE_DB = 'scan-and-fill-scan-cache';
-const LAST_MANUAL_KEY = 'scan-and-fill-last-manual';
+const STORAGE_KEY = 'scan-and-fill-web-state-v1'
+const HANDLE_DB_NAME = 'scan-and-fill-handles'
+const SCAN_CACHE_DB = 'scan-and-fill-scan-cache'
+const LAST_MANUAL_KEY = 'scan-and-fill-last-manual'
 
 createApp({
   setup() {
-    const state = ref(loadState());
-    const currentView = ref('dashboard');
-    const editingProject = ref(null);
-    const execProject = ref(null);
-    const runResult = ref(null);
-    const isRunning = ref(false);
-    const error = ref('');
-    const successMsg = ref('');
-    const importText = ref('');
-    const showAdvanced = ref(false);
-    const excelMetadata = ref({ tabs: [], categories: {}, months: [] });
-    const loadingMetadata = ref(false);
-    const newFolderName = ref('');
-    const showAddMapping = ref(false);
-    const pdfCount = ref(0);
-    const conflictIdx = ref(null);
-    const conflictSelectedAmount = ref('');
-    const conflictManualAmount = ref('');
-    const execStep = ref('ready');
-    const pdfBlobUrl = ref(null);
-    const pdfZoom = ref(125);
-    const showPdf = ref(true);
-    const pdfLoading = ref(false);
-    const scanCacheTimestamp = ref(null);
-    const scanProgress = ref({ current: 0, total: 0, currentFile: '' });
-    const lastManualEntry = ref((() => { try { return localStorage.getItem(LAST_MANUAL_KEY) || ''; } catch { return ''; } })());
-    const showShortcuts = ref(false);
-    const lang = ref(getStoredLang());
+    const state = ref(loadState())
+    const currentView = ref('dashboard')
+    const editingProject = ref(null)
+    const execProject = ref(null)
+    const runResult = ref(null)
+    const isRunning = ref(false)
+    const error = ref('')
+    const successMsg = ref('')
+    const importText = ref('')
+    const showAdvanced = ref(false)
+    const excelMetadata = ref({ tabs: [], categories: {}, months: [] })
+    const loadingMetadata = ref(false)
+    const newFolderName = ref('')
+    const showAddMapping = ref(false)
+    const pdfCount = ref(0)
+    const conflictIdx = ref(null)
+    const conflictSelectedAmount = ref('')
+    const conflictManualAmount = ref('')
+    const execStep = ref('ready')
+    const pdfBlobUrl = ref(null)
+    const pdfZoom = ref(125)
+    const showPdf = ref(true)
+    const pdfLoading = ref(false)
+    const scanCacheTimestamp = ref(null)
+    const scanProgress = ref({ current: 0, total: 0, currentFile: '' })
+    const lastManualEntry = ref(
+      (() => {
+        try {
+          return localStorage.getItem(LAST_MANUAL_KEY) || ''
+        } catch {
+          return ''
+        }
+      })()
+    )
+    const showShortcuts = ref(false)
+    const lang = ref(getStoredLang())
 
     function t(key, params) {
-      let str = translate(lang.value, key);
+      let str = translate(lang.value, key)
       if (params) {
         for (const [k, v] of Object.entries(params)) {
-          str = str.replace('{' + k + '}', v);
+          str = str.replace('{' + k + '}', v)
         }
       }
-      return str;
+      return str
     }
 
     function setLang(newLang) {
-      lang.value = newLang;
-      setStoredLang(newLang);
+      lang.value = newLang
+      setStoredLang(newLang)
     }
 
-    const projects = computed(() => state.value.projects || []);
+    const projects = computed(() => state.value.projects || [])
 
     const currentConflict = computed(() => {
-      if (conflictIdx.value === null || !runResult.value) return null;
-      return runResult.value.conflicts[conflictIdx.value] || null;
-    });
+      if (conflictIdx.value === null || !runResult.value) return null
+      return runResult.value.conflicts[conflictIdx.value] || null
+    })
 
     const unresolvedConflicts = computed(() => {
-      if (!runResult.value) return [];
-      return runResult.value.conflicts.filter(c => c.resolvedAmount === undefined);
-    });
+      if (!runResult.value) return []
+      return runResult.value.conflicts.filter((c) => c.resolvedAmount === undefined)
+    })
 
     const allResolved = computed(() => {
-      if (!runResult.value || runResult.value.conflicts.length === 0) return true;
-      return unresolvedConflicts.value.length === 0;
-    });
+      if (!runResult.value || runResult.value.conflicts.length === 0) return true
+      return unresolvedConflicts.value.length === 0
+    })
 
     const groupedResults = computed(() => {
-      if (!runResult.value) return {};
-      const grouped = {};
+      if (!runResult.value) return {}
+      const grouped = {}
       for (const f of runResult.value.files) {
-        if (!grouped[f.month]) grouped[f.month] = {};
-        if (!grouped[f.month][f.category]) grouped[f.month][f.category] = [];
-        grouped[f.month][f.category].push(f);
+        if (!grouped[f.month]) grouped[f.month] = {}
+        if (!grouped[f.month][f.category]) grouped[f.month][f.category] = []
+        grouped[f.month][f.category].push(f)
       }
-      return grouped;
-    });
+      return grouped
+    })
 
     const finalizeTotals = computed(() => {
-      if (!runResult.value) return {};
-      const totals = {};
+      if (!runResult.value) return {}
+      const totals = {}
       for (const f of runResult.value.files) {
-        const amt = f.resolvedAmount !== undefined ? f.resolvedAmount : (f.status === 'success' ? f.amount : 0);
-        if (!totals[f.category]) totals[f.category] = 0;
-        totals[f.category] += amt;
+        const amt =
+          f.resolvedAmount !== undefined ? f.resolvedAmount : f.status === 'success' ? f.amount : 0
+        if (!totals[f.category]) totals[f.category] = 0
+        totals[f.category] += amt
       }
-      return totals;
-    });
+      return totals
+    })
 
     const grandTotal = computed(() => {
-      return Object.values(finalizeTotals.value).reduce((a, b) => a + b, 0);
-    });
+      return Object.values(finalizeTotals.value).reduce((a, b) => a + b, 0)
+    })
 
-    const metadataCategories = computed(() => Object.keys(excelMetadata.value.categories || {}));
-    const metadataMonths = computed(() => excelMetadata.value.months || []);
-    const metadataTabs = computed(() => excelMetadata.value.tabs || []);
+    const metadataCategories = computed(() => Object.keys(excelMetadata.value.categories || {}))
+    const metadataMonths = computed(() => excelMetadata.value.months || [])
+    const metadataTabs = computed(() => excelMetadata.value.tabs || [])
 
-    const openSections = ref({});
+    const openSections = ref({})
     function toggleSection(key) {
-      openSections.value[key] = !openSections.value[key];
+      openSections.value[key] = !openSections.value[key]
     }
     function isSectionOpen(key) {
-      return !!openSections.value[key];
+      return !!openSections.value[key]
     }
 
     onMounted(async () => {
-      await restoreHandlePermissions();
-    });
+      await restoreHandlePermissions()
+    })
 
     function persist() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.value));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.value))
     }
 
     function showError(msg) {
-      error.value = msg;
-      setTimeout(() => { if (error.value === msg) error.value = ''; }, 8000);
+      error.value = msg
+      setTimeout(() => {
+        if (error.value === msg) error.value = ''
+      }, 8000)
     }
 
     function showSuccess(msg) {
-      successMsg.value = msg;
-      setTimeout(() => { if (successMsg.value === msg) successMsg.value = ''; }, 5000);
+      successMsg.value = msg
+      setTimeout(() => {
+        if (successMsg.value === msg) successMsg.value = ''
+      }, 5000)
     }
 
     function formatCacheTime(ts) {
-      const diff = Date.now() - ts;
-      if (diff < 60000) return t('cache.justNow');
-      if (diff < 3600000) return Math.floor(diff / 60000) + ' ' + t('cache.minAgo');
-      if (diff < 86400000) return Math.floor(diff / 3600000) + t('cache.hAgo');
-      return new Date(ts).toLocaleString();
+      const diff = Date.now() - ts
+      if (diff < 60000) return t('cache.justNow')
+      if (diff < 3600000) return Math.floor(diff / 60000) + ' ' + t('cache.minAgo')
+      if (diff < 86400000) return Math.floor(diff / 3600000) + t('cache.hAgo')
+      return new Date(ts).toLocaleString()
     }
 
     // ---- Dashboard ----
@@ -140,227 +153,255 @@ createApp({
         id: String(Date.now()),
         name: t('dashboard.newProjectDefault'),
         categoryMapping: {},
-        excelConfig: { sheetName: '', monthStartCell: 'B1', categoryColumn: 'A', categoryRowsMap: {} },
+        excelConfig: {
+          sheetName: '',
+          monthStartCell: 'B1',
+          categoryColumn: 'A',
+          categoryRowsMap: {}
+        },
         fileAccess: { folderHandleKey: '', spreadsheetHandleKey: '', spreadsheetName: '' }
-      };
-      state.value.projects.push(project);
-      persist();
-      openEditProject(project);
+      }
+      state.value.projects.push(project)
+      persist()
+      openEditProject(project)
     }
 
     function deleteProject(id) {
-      if (!confirm(t('dashboard.deleteConfirm'))) return;
-      state.value.projects = state.value.projects.filter(p => p.id !== id);
-      persist();
-      clearScanCache(id).catch(() => {});
+      if (!confirm(t('dashboard.deleteConfirm'))) return
+      state.value.projects = state.value.projects.filter((p) => p.id !== id)
+      persist()
+      clearScanCache(id).catch(() => {})
     }
 
     function getProjectStatus(project) {
-      const hasFolder = !!project.fileAccess.folderHandleKey;
-      const hasSpreadsheet = !!project.fileAccess.spreadsheetHandleKey;
-      const hasMappings = Object.keys(project.categoryMapping || {}).length > 0;
-      return { hasFolder, hasSpreadsheet, hasMappings };
+      const hasFolder = !!project.fileAccess.folderHandleKey
+      const hasSpreadsheet = !!project.fileAccess.spreadsheetHandleKey
+      const hasMappings = Object.keys(project.categoryMapping || {}).length > 0
+      return { hasFolder, hasSpreadsheet, hasMappings }
     }
 
     function openEditProject(project) {
-      editingProject.value = JSON.parse(JSON.stringify(project));
-      excelMetadata.value = { tabs: [], categories: {}, months: [] };
-      currentView.value = 'editProject';
+      editingProject.value = JSON.parse(JSON.stringify(project))
+      excelMetadata.value = { tabs: [], categories: {}, months: [] }
+      currentView.value = 'editProject'
       if (editingProject.value.fileAccess.spreadsheetHandleKey) {
-        loadMetadata();
+        loadMetadata()
       }
     }
 
     async function openExecution(project) {
-      execProject.value = JSON.parse(JSON.stringify(project));
-      runResult.value = null;
-      execStep.value = 'ready';
-      pdfCount.value = 0;
-      scanCacheTimestamp.value = null;
-      currentView.value = 'execution';
-      countPdfs();
+      execProject.value = JSON.parse(JSON.stringify(project))
+      runResult.value = null
+      execStep.value = 'ready'
+      pdfCount.value = 0
+      scanCacheTimestamp.value = null
+      currentView.value = 'execution'
+      countPdfs()
       try {
-        const cached = await getScanCache(project.id);
+        const cached = await getScanCache(project.id)
         if (cached && cached.summary) {
-          runResult.value = cached.summary;
-          scanCacheTimestamp.value = cached.timestamp;
-          const hasUnresolved = cached.summary.conflicts &&
-            cached.summary.conflicts.some(c => c.resolvedAmount === undefined);
-          execStep.value = hasUnresolved ? 'resolve' : 'finalize';
+          runResult.value = cached.summary
+          scanCacheTimestamp.value = cached.timestamp
+          const hasUnresolved =
+            cached.summary.conflicts &&
+            cached.summary.conflicts.some((c) => c.resolvedAmount === undefined)
+          execStep.value = hasUnresolved ? 'resolve' : 'finalize'
         }
-      } catch (e) { /* cache miss is fine */ }
+      } catch (e) {
+        /* cache miss is fine */
+      }
     }
 
     function goToDashboard() {
-      currentView.value = 'dashboard';
-      editingProject.value = null;
-      execProject.value = null;
-      runResult.value = null;
+      currentView.value = 'dashboard'
+      editingProject.value = null
+      execProject.value = null
+      runResult.value = null
     }
 
     function exportJson() {
-      const blob = new Blob([JSON.stringify(state.value, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'scan-and-fill-state-' + Date.now() + '.json';
-      link.click();
-      URL.revokeObjectURL(link.href);
+      const blob = new Blob([JSON.stringify(state.value, null, 2)], { type: 'application/json' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = 'scan-and-fill-state-' + Date.now() + '.json'
+      link.click()
+      URL.revokeObjectURL(link.href)
     }
 
     function importJsonReplaceAll() {
       try {
-        const parsed = JSON.parse(importText.value);
-        if (!Array.isArray(parsed.projects)) throw new Error(t('dashboard.invalidStateFile'));
-        state.value = parsed;
-        persist();
-        importText.value = '';
-        showSuccess(t('dashboard.stateImported'));
+        const parsed = JSON.parse(importText.value)
+        if (!Array.isArray(parsed.projects)) throw new Error(t('dashboard.invalidStateFile'))
+        state.value = parsed
+        persist()
+        importText.value = ''
+        showSuccess(t('dashboard.stateImported'))
       } catch (e) {
-        showError(t('dashboard.importFailed') + ': ' + e.message);
+        showError(t('dashboard.importFailed') + ': ' + e.message)
       }
     }
 
     // ---- Edit Project ----
     async function connectFolder() {
       if (!editingProject.value || !window.showDirectoryPicker) {
-        showError(t('editProject.browserNoFolder'));
-        return;
+        showError(t('editProject.browserNoFolder'))
+        return
       }
       try {
-        const handle = await window.showDirectoryPicker();
-        const key = 'folder:' + editingProject.value.id;
-        await saveHandle(key, handle);
-        editingProject.value.fileAccess.folderHandleKey = key;
+        const handle = await window.showDirectoryPicker()
+        console.log('connectFolder: got handle for:', handle.name)
+        const key = 'folder:' + editingProject.value.id
+        await saveHandle(key, handle)
+        editingProject.value.fileAccess.folderHandleKey = key
+        console.log('connectFolder: saved with key:', key)
       } catch (e) {
-        if (e.name !== 'AbortError') showError(t('editProject.folderFailed') + ': ' + e.message);
+        console.error('connectFolder error:', e)
+        if (e.name !== 'AbortError') showError(t('editProject.folderFailed') + ': ' + e.message)
       }
     }
 
     async function connectSpreadsheet() {
       if (!editingProject.value || !window.showOpenFilePicker) {
-        showError(t('editProject.browserNoFile'));
-        return;
+        showError(t('editProject.browserNoFile'))
+        return
       }
       try {
         const [handle] = await window.showOpenFilePicker({
           multiple: false,
           types: [{ description: 'Spreadsheet', accept: { 'application/*': ['.xlsx', '.ods'] } }]
-        });
-        const key = 'spreadsheet:' + editingProject.value.id;
-        await saveHandle(key, handle);
-        editingProject.value.fileAccess.spreadsheetHandleKey = key;
-        editingProject.value.fileAccess.spreadsheetName = handle.name;
-        await loadMetadata();
+        })
+        const key = 'spreadsheet:' + editingProject.value.id
+        await saveHandle(key, handle)
+        editingProject.value.fileAccess.spreadsheetHandleKey = key
+        editingProject.value.fileAccess.spreadsheetName = handle.name
+        await loadMetadata()
       } catch (e) {
-        if (e.name !== 'AbortError') showError(t('editProject.spreadsheetFailed') + ': ' + e.message);
+        if (e.name !== 'AbortError')
+          showError(t('editProject.spreadsheetFailed') + ': ' + e.message)
       }
     }
 
     async function loadMetadata() {
-      if (!editingProject.value) return;
-      loadingMetadata.value = true;
+      if (!editingProject.value) return
+      loadingMetadata.value = true
       try {
-        const file = await getSpreadsheetFile(editingProject.value);
-        if (!file) { loadingMetadata.value = false; return; }
-        const form = new FormData();
-        form.append('spreadsheet', file, file.name);
-        form.append('sheetName', editingProject.value.excelConfig.sheetName || '');
-        form.append('categoryColumn', editingProject.value.excelConfig.categoryColumn || 'A');
-        form.append('monthStartCell', editingProject.value.excelConfig.monthStartCell || 'B1');
-        const serverUrl = state.value.serverUrl || '';
-        const response = await fetch(serverUrl + '/api/v1/excel/metadata', { method: 'POST', body: form });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error?.message || 'Metadata failed');
-        excelMetadata.value = payload.metadata;
+        const file = await getSpreadsheetFile(editingProject.value)
+        if (!file) {
+          loadingMetadata.value = false
+          return
+        }
+        const form = new FormData()
+        form.append('spreadsheet', file, file.name)
+        form.append('sheetName', editingProject.value.excelConfig.sheetName || '')
+        form.append('categoryColumn', editingProject.value.excelConfig.categoryColumn || 'A')
+        form.append('monthStartCell', editingProject.value.excelConfig.monthStartCell || 'B1')
+        const serverUrl = state.value.serverUrl || ''
+        const response = await fetch(serverUrl + '/api/v1/excel/metadata', {
+          method: 'POST',
+          body: form
+        })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error?.message || 'Metadata failed')
+        excelMetadata.value = payload.metadata
         // Auto-update categoryRowsMap
-        const mapping = editingProject.value.categoryMapping || {};
-        editingProject.value.excelConfig.categoryRowsMap = buildCategoryRowsMap(mapping, payload.metadata.categories || {});
+        const mapping = editingProject.value.categoryMapping || {}
+        editingProject.value.excelConfig.categoryRowsMap = buildCategoryRowsMap(
+          mapping,
+          payload.metadata.categories || {}
+        )
       } catch (e) {
-        showError(t('editProject.metadataFailed') + ': ' + e.message);
+        showError(t('editProject.metadataFailed') + ': ' + e.message)
       } finally {
-        loadingMetadata.value = false;
+        loadingMetadata.value = false
       }
     }
 
     function addMappingRow() {
-      const name = newFolderName.value.trim();
-      if (!name) return;
+      const name = newFolderName.value.trim()
+      if (!name) return
       if (editingProject.value.categoryMapping[name] !== undefined) {
-        showError('"' + name + '" ' + t('editProject.folderExists'));
-        return;
+        showError('"' + name + '" ' + t('editProject.folderExists'))
+        return
       }
-      editingProject.value.categoryMapping[name] = '';
-      newFolderName.value = '';
-      showAddMapping.value = false;
+      editingProject.value.categoryMapping[name] = ''
+      newFolderName.value = ''
+      showAddMapping.value = false
     }
 
     function updateMappingLabel(folderName, excelLabel) {
-      editingProject.value.categoryMapping[folderName] = excelLabel;
+      editingProject.value.categoryMapping[folderName] = excelLabel
       editingProject.value.excelConfig.categoryRowsMap = buildCategoryRowsMap(
         editingProject.value.categoryMapping,
         excelMetadata.value.categories || {}
-      );
+      )
     }
 
     function deleteMappingRow(folderName) {
-      const newMapping = { ...editingProject.value.categoryMapping };
-      delete newMapping[folderName];
-      editingProject.value.categoryMapping = newMapping;
+      const newMapping = { ...editingProject.value.categoryMapping }
+      delete newMapping[folderName]
+      editingProject.value.categoryMapping = newMapping
       editingProject.value.excelConfig.categoryRowsMap = buildCategoryRowsMap(
-        newMapping, excelMetadata.value.categories || {}
-      );
+        newMapping,
+        excelMetadata.value.categories || {}
+      )
     }
 
     function saveProject() {
-      if (!editingProject.value) return;
-      const idx = state.value.projects.findIndex(p => p.id === editingProject.value.id);
+      if (!editingProject.value) return
+      console.log('saveProject: folderHandleKey =', editingProject.value.fileAccess.folderHandleKey)
+      const idx = state.value.projects.findIndex((p) => p.id === editingProject.value.id)
       if (idx !== -1) {
-        state.value.projects[idx] = JSON.parse(JSON.stringify(editingProject.value));
+        state.value.projects[idx] = JSON.parse(JSON.stringify(editingProject.value))
       } else {
-        state.value.projects.push(JSON.parse(JSON.stringify(editingProject.value)));
+        state.value.projects.push(JSON.parse(JSON.stringify(editingProject.value)))
       }
-      persist();
-      showSuccess(t('editProject.projectSaved'));
-      goToDashboard();
+      persist()
+      showSuccess(t('editProject.projectSaved'))
+      goToDashboard()
     }
 
     // ---- Execution ----
     async function countPdfs() {
       try {
-        if (!execProject.value) return;
-        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey);
-        if (!folderHandle) return;
-        const files = await gatherPdfFiles(folderHandle);
-        pdfCount.value = files.length;
+        if (!execProject.value) return
+        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey)
+        if (!folderHandle) {
+          console.warn('countPdfs: no folder handle')
+          return
+        }
+        const files = await gatherPdfFiles(folderHandle)
+        pdfCount.value = files.length
+        console.log('countPdfs: found', files.length, 'PDFs')
       } catch (e) {
-        pdfCount.value = 0;
+        console.error('countPdfs error:', e)
+        pdfCount.value = 0
       }
     }
 
     async function runScan(clearResolutions) {
-      isRunning.value = true;
-      error.value = '';
-      execStep.value = 'scanning';
-      scanProgress.value = { current: 0, total: 0, currentFile: '' };
+      isRunning.value = true
+      error.value = ''
+      execStep.value = 'scanning'
+      scanProgress.value = { current: 0, total: 0, currentFile: '' }
 
-      const oldResolutions = new Map();
+      const oldResolutions = new Map()
       if (!clearResolutions && runResult.value) {
-        for (const c of (runResult.value.conflicts || [])) {
-          if (c.resolvedAmount !== undefined) oldResolutions.set(c.filePath, c.resolvedAmount);
+        for (const c of runResult.value.conflicts || []) {
+          if (c.resolvedAmount !== undefined) oldResolutions.set(c.filePath, c.resolvedAmount)
         }
-        for (const f of (runResult.value.files || [])) {
-          if (f.resolvedAmount !== undefined) oldResolutions.set(f.filePath, f.resolvedAmount);
+        for (const f of runResult.value.files || []) {
+          if (f.resolvedAmount !== undefined) oldResolutions.set(f.filePath, f.resolvedAmount)
         }
       }
-      runResult.value = null;
+      runResult.value = null
 
       try {
-        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey);
-        if (!folderHandle) throw new Error(t('execution.connectFolderFirst'));
-        const pdfFiles = await gatherPdfFiles(folderHandle);
-        if (pdfFiles.length === 0) throw new Error(t('execution.noPdfsFound'));
-        pdfCount.value = pdfFiles.length;
-        scanProgress.value.total = pdfFiles.length;
+        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey)
+        if (!folderHandle) throw new Error(t('execution.connectFolderFirst'))
+        const pdfFiles = await gatherPdfFiles(folderHandle)
+        if (pdfFiles.length === 0) throw new Error(t('execution.noPdfsFound'))
+        pdfCount.value = pdfFiles.length
+        scanProgress.value.total = pdfFiles.length
 
         const summary = {
           project: execProject.value.name || 'Unnamed',
@@ -368,108 +409,138 @@ createApp({
           totals: {},
           conflicts: [],
           stats: { done: 0, skipped: 0, failed: 0, ambiguous: 0, total: pdfFiles.length }
-        };
+        }
 
-        const serverUrl = state.value.serverUrl || '';
+        const serverUrl = state.value.serverUrl || ''
         for (let i = 0; i < pdfFiles.length; i++) {
-          const file = pdfFiles[i];
-          scanProgress.value.current = i + 1;
-          scanProgress.value.currentFile = file.relativePath.split('/').pop();
+          const file = pdfFiles[i]
+          scanProgress.value.current = i + 1
+          scanProgress.value.currentFile = file.relativePath.split('/').pop()
 
           try {
-            const form = new FormData();
-            form.append('pdfFile', file.blob, file.relativePath);
-            form.append('relativePath', file.relativePath);
-            form.append('project', JSON.stringify(execProject.value));
-            const response = await fetch(serverUrl + '/api/v1/extract-single', { method: 'POST', body: form });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error?.message || 'Extract failed');
+            const form = new FormData()
+            form.append('pdfFile', file.blob, file.relativePath)
+            form.append('relativePath', file.relativePath)
+            form.append('project', JSON.stringify(execProject.value))
+            const response = await fetch(serverUrl + '/api/v1/extract-single', {
+              method: 'POST',
+              body: form
+            })
+            const payload = await response.json()
+            if (!response.ok) throw new Error(payload.error?.message || 'Extract failed')
 
-            const r = payload.result;
-            const fileInfo = { month: r.month, category: r.category, fileName: r.fileName, filePath: r.filePath, status: r.status, amount: r.amount || 0, message: r.message };
-            summary.files.push(fileInfo);
-            if (!summary.totals[r.month]) summary.totals[r.month] = {};
-            if (!summary.totals[r.month][r.category]) summary.totals[r.month][r.category] = 0;
+            const r = payload.result
+            const fileInfo = {
+              month: r.month,
+              category: r.category,
+              fileName: r.fileName,
+              filePath: r.filePath,
+              status: r.status,
+              amount: r.amount || 0,
+              message: r.message
+            }
+            summary.files.push(fileInfo)
+            if (!summary.totals[r.month]) summary.totals[r.month] = {}
+            if (!summary.totals[r.month][r.category]) summary.totals[r.month][r.category] = 0
 
             if (r.status === 'success') {
-              summary.totals[r.month][r.category] += r.amount;
-              summary.stats.done += 1;
+              summary.totals[r.month][r.category] += r.amount
+              summary.stats.done += 1
             } else if (r.status === 'ambiguous') {
-              summary.stats.ambiguous += 1;
-              summary.conflicts.push({ ...fileInfo, type: 'ambiguity', candidates: r.candidates || [] });
+              summary.stats.ambiguous += 1
+              summary.conflicts.push({
+                ...fileInfo,
+                type: 'ambiguity',
+                candidates: r.candidates || []
+              })
             } else {
-              summary.stats.failed += 1;
-              summary.conflicts.push({ ...fileInfo, type: 'failure', candidates: r.candidates || [] });
+              summary.stats.failed += 1
+              summary.conflicts.push({
+                ...fileInfo,
+                type: 'failure',
+                candidates: r.candidates || []
+              })
             }
           } catch (e) {
-            const failName = file.relativePath.split('/').pop();
-            summary.files.push({ month: 'Unknown', category: 'Unknown', fileName: failName, filePath: file.relativePath, status: 'failed', amount: 0, message: e.message });
-            summary.stats.failed += 1;
+            const failName = file.relativePath.split('/').pop()
+            summary.files.push({
+              month: 'Unknown',
+              category: 'Unknown',
+              fileName: failName,
+              filePath: file.relativePath,
+              status: 'failed',
+              amount: 0,
+              message: e.message
+            })
+            summary.stats.failed += 1
           }
         }
 
         if (oldResolutions.size > 0) {
           for (const conflict of summary.conflicts) {
-            const oldAmt = oldResolutions.get(conflict.filePath);
+            const oldAmt = oldResolutions.get(conflict.filePath)
             if (oldAmt !== undefined) {
-              conflict.resolvedAmount = oldAmt;
-              const fi = summary.files.findIndex(f => f.filePath === conflict.filePath);
-              if (fi !== -1) { summary.files[fi].resolvedAmount = oldAmt; summary.files[fi].status = 'resolved'; }
+              conflict.resolvedAmount = oldAmt
+              const fi = summary.files.findIndex((f) => f.filePath === conflict.filePath)
+              if (fi !== -1) {
+                summary.files[fi].resolvedAmount = oldAmt
+                summary.files[fi].status = 'resolved'
+              }
             }
           }
           for (const file of summary.files) {
             if (file.status === 'success' && oldResolutions.has(file.filePath)) {
-              file.resolvedAmount = oldResolutions.get(file.filePath);
+              file.resolvedAmount = oldResolutions.get(file.filePath)
             }
           }
         }
 
-        runResult.value = summary;
-        scanCacheTimestamp.value = Date.now();
-        saveScanCache(execProject.value.id, summary).catch(() => {});
-        const hasUnresolved = summary.conflicts.some(c => c.resolvedAmount === undefined);
-        execStep.value = (summary.conflicts.length > 0 && hasUnresolved) ? 'resolve' : 'finalize';
+        runResult.value = summary
+        scanCacheTimestamp.value = Date.now()
+        saveScanCache(execProject.value.id, summary).catch(() => {})
+        const hasUnresolved = summary.conflicts.some((c) => c.resolvedAmount === undefined)
+        execStep.value = summary.conflicts.length > 0 && hasUnresolved ? 'resolve' : 'finalize'
       } catch (e) {
-        showError(e.message);
-        execStep.value = 'ready';
+        showError(e.message)
+        execStep.value = 'ready'
       } finally {
-        isRunning.value = false;
-        scanProgress.value = { current: 0, total: 0, currentFile: '' };
+        isRunning.value = false
+        scanProgress.value = { current: 0, total: 0, currentFile: '' }
       }
     }
 
     async function forceRescan() {
-      scanCacheTimestamp.value = null;
+      scanCacheTimestamp.value = null
       if (execProject.value) {
-        clearScanCache(execProject.value.id).catch(() => {});
+        clearScanCache(execProject.value.id).catch(() => {})
       }
-      await runScan(true);
+      await runScan(true)
     }
 
     async function openConflictModal(idx) {
-      conflictIdx.value = idx;
-      conflictSelectedAmount.value = '';
-      const conflict = runResult.value.conflicts[idx];
+      conflictIdx.value = idx
+      conflictSelectedAmount.value = ''
+      const conflict = runResult.value.conflicts[idx]
       if (conflict && conflict.resolvedAmount !== undefined) {
-        conflictManualAmount.value = String(conflict.resolvedAmount);
+        conflictManualAmount.value = String(conflict.resolvedAmount)
       } else {
-        conflictManualAmount.value = lastManualEntry.value || '';
+        conflictManualAmount.value = lastManualEntry.value || ''
       }
-      await loadPdfForConflict();
+      await loadPdfForConflict()
     }
 
     function closeConflictModal() {
-      conflictIdx.value = null;
-      conflictSelectedAmount.value = '';
-      conflictManualAmount.value = '';
+      conflictIdx.value = null
+      conflictSelectedAmount.value = ''
+      conflictManualAmount.value = ''
       if (pdfBlobUrl.value) {
-        URL.revokeObjectURL(pdfBlobUrl.value);
-        pdfBlobUrl.value = null;
+        URL.revokeObjectURL(pdfBlobUrl.value)
+        pdfBlobUrl.value = null
       }
     }
 
     function editFileAmount(file) {
-      let idx = runResult.value.conflicts.findIndex(c => c.filePath === file.filePath);
+      let idx = runResult.value.conflicts.findIndex((c) => c.filePath === file.filePath)
       if (idx === -1) {
         runResult.value.conflicts.push({
           filePath: file.filePath,
@@ -481,150 +552,221 @@ createApp({
           status: file.status,
           resolvedAmount: file.amount,
           message: file.message || ''
-        });
-        idx = runResult.value.conflicts.length - 1;
+        })
+        idx = runResult.value.conflicts.length - 1
       }
-      openConflictModal(idx);
+      openConflictModal(idx)
     }
 
     async function loadPdfForConflict() {
       if (pdfBlobUrl.value) {
-        URL.revokeObjectURL(pdfBlobUrl.value);
-        pdfBlobUrl.value = null;
+        URL.revokeObjectURL(pdfBlobUrl.value)
+        pdfBlobUrl.value = null
       }
-      pdfLoading.value = true;
+      pdfLoading.value = true
       try {
-        const conflict = currentConflict.value;
-        if (!conflict || !execProject.value) return;
-        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey);
-        if (!folderHandle) return;
-        const fileHandle = await findFileInFolder(folderHandle, conflict.filePath);
-        if (!fileHandle) return;
-        const file = await fileHandle.getFile();
-        pdfBlobUrl.value = URL.createObjectURL(file);
+        const conflict = currentConflict.value
+        if (!conflict || !execProject.value) return
+        const folderHandle = await getHandle(execProject.value.fileAccess.folderHandleKey)
+        if (!folderHandle) return
+        const fileHandle = await findFileInFolder(folderHandle, conflict.filePath)
+        if (!fileHandle) return
+        const file = await fileHandle.getFile()
+        pdfBlobUrl.value = URL.createObjectURL(file)
       } catch (e) {
-        console.warn('Could not load PDF for preview:', e.message);
+        console.warn('Could not load PDF for preview:', e.message)
       } finally {
-        pdfLoading.value = false;
+        pdfLoading.value = false
       }
     }
 
     function onKeydown(e) {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
-        const tag = (e.target?.tagName || '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-        e.preventDefault();
-        showShortcuts.value = !showShortcuts.value;
-        return;
+        const tag = (e.target?.tagName || '').toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+        e.preventDefault()
+        showShortcuts.value = !showShortcuts.value
+        return
       }
       if (showShortcuts.value && e.key === 'Escape') {
-        showShortcuts.value = false;
-        return;
+        showShortcuts.value = false
+        return
       }
-      if (conflictIdx.value === null) return;
-      if (e.key === 'Escape') closeConflictModal();
+      if (conflictIdx.value === null) return
+      if (e.key === 'Escape') closeConflictModal()
       if (e.key === 'Enter' && (conflictSelectedAmount.value || conflictManualAmount.value)) {
-        e.preventDefault();
-        applyConflictResolution();
+        e.preventDefault()
+        applyConflictResolution()
       }
     }
 
-    onMounted(() => { document.addEventListener('keydown', onKeydown); });
+    onMounted(() => {
+      document.addEventListener('keydown', onKeydown)
+    })
 
     function evaluateAmountExpression(input) {
-      const normalized = String(input).replace(/,/g, '.').trim();
+      const normalized = String(input).replace(/,/g, '.').trim()
       if (normalized.includes('+')) {
-        const parts = normalized.split('+').map(p => parseFloat(p.trim()));
-        if (parts.some(isNaN)) return NaN;
-        return Math.round(parts.reduce((a, b) => a + b, 0) * 100) / 100;
+        const parts = normalized.split('+').map((p) => parseFloat(p.trim()))
+        if (parts.some(isNaN)) return NaN
+        return Math.round(parts.reduce((a, b) => a + b, 0) * 100) / 100
       }
-      return parseFloat(normalized);
+      return parseFloat(normalized)
     }
 
     function applyConflictResolution() {
-      const val = conflictManualAmount.value || conflictSelectedAmount.value;
-      const amount = evaluateAmountExpression(val);
-      if (isNaN(amount)) { showError(t('conflict.invalidAmount')); return; }
-
-      if (conflictManualAmount.value) {
-        lastManualEntry.value = String(amount);
-        try { localStorage.setItem(LAST_MANUAL_KEY, String(amount)); } catch {}
+      const val = conflictManualAmount.value || conflictSelectedAmount.value
+      const amount = evaluateAmountExpression(val)
+      if (isNaN(amount)) {
+        showError(t('conflict.invalidAmount'))
+        return
       }
 
-      const conflict = runResult.value.conflicts[conflictIdx.value];
-      conflict.resolvedAmount = amount;
+      if (conflictManualAmount.value) {
+        lastManualEntry.value = String(amount)
+        try {
+          localStorage.setItem(LAST_MANUAL_KEY, String(amount))
+        } catch {}
+      }
 
-      const fileIdx = runResult.value.files.findIndex(f => f.filePath === conflict.filePath);
+      const conflict = runResult.value.conflicts[conflictIdx.value]
+      conflict.resolvedAmount = amount
+
+      const fileIdx = runResult.value.files.findIndex((f) => f.filePath === conflict.filePath)
       if (fileIdx !== -1) {
-        runResult.value.files[fileIdx].resolvedAmount = amount;
-        runResult.value.files[fileIdx].status = 'resolved';
+        runResult.value.files[fileIdx].resolvedAmount = amount
+        runResult.value.files[fileIdx].status = 'resolved'
       }
 
       // Auto-advance to next unresolved
-      let nextIdx = -1;
+      let nextIdx = -1
       for (let i = conflictIdx.value + 1; i < runResult.value.conflicts.length; i++) {
-        if (runResult.value.conflicts[i].resolvedAmount === undefined) { nextIdx = i; break; }
+        if (runResult.value.conflicts[i].resolvedAmount === undefined) {
+          nextIdx = i
+          break
+        }
       }
       if (nextIdx === -1) {
         for (let i = 0; i < conflictIdx.value; i++) {
-          if (runResult.value.conflicts[i].resolvedAmount === undefined) { nextIdx = i; break; }
+          if (runResult.value.conflicts[i].resolvedAmount === undefined) {
+            nextIdx = i
+            break
+          }
         }
       }
 
       if (nextIdx !== -1) {
-        openConflictModal(nextIdx);
+        openConflictModal(nextIdx)
       } else {
-        closeConflictModal();
-        execStep.value = 'finalize';
+        closeConflictModal()
+        execStep.value = 'finalize'
       }
       if (execProject.value && runResult.value) {
-        saveScanCache(execProject.value.id, runResult.value).catch(() => {});
+        saveScanCache(execProject.value.id, runResult.value).catch(() => {})
       }
     }
 
     async function finalizeAndDownload() {
-      error.value = '';
+      error.value = ''
       try {
-        const file = await getSpreadsheetFile(execProject.value);
-        if (!file) throw new Error(t('execution.connectSpreadsheetFirst'));
-        const form = new FormData();
-        form.append('spreadsheet', file, file.name);
-        form.append('payload', JSON.stringify({ project: execProject.value, summary: runResult.value }));
-        const serverUrl = state.value.serverUrl || '';
-        const response = await fetch(serverUrl + '/api/v1/finalize', { method: 'POST', body: form });
+        const file = await getSpreadsheetFile(execProject.value)
+        if (!file) throw new Error(t('execution.connectSpreadsheetFirst'))
+        const form = new FormData()
+        form.append('spreadsheet', file, file.name)
+        form.append(
+          'payload',
+          JSON.stringify({ project: execProject.value, summary: runResult.value })
+        )
+        const serverUrl = state.value.serverUrl || ''
+        const response = await fetch(serverUrl + '/api/v1/finalize', { method: 'POST', body: form })
         if (!response.ok) {
-          const payload = await response.json();
-          throw new Error(payload.error?.message || 'Finalize failed');
+          const payload = await response.json()
+          throw new Error(payload.error?.message || 'Finalize failed')
         }
-        const blob = await response.blob();
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'updated-' + file.name;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        execStep.value = 'done';
-        showSuccess(t('execution.doneMessage'));
+        const blob = await response.blob()
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = 'updated-' + file.name
+        link.click()
+        URL.revokeObjectURL(link.href)
+        execStep.value = 'done'
+        showSuccess(t('execution.doneMessage'))
       } catch (e) {
-        showError(e.message);
+        showError(e.message)
       }
     }
 
     return {
-      state, currentView, editingProject, execProject, runResult, isRunning,
-      error, successMsg, importText, showAdvanced, excelMetadata, loadingMetadata,
-      newFolderName, showAddMapping, pdfCount, conflictIdx, conflictSelectedAmount,
-      conflictManualAmount, execStep, pdfBlobUrl, pdfZoom, showPdf, pdfLoading,
-      scanCacheTimestamp, scanProgress, lastManualEntry, showShortcuts, lang,
-      projects, currentConflict, unresolvedConflicts,
-      allResolved, groupedResults, finalizeTotals, grandTotal, metadataCategories,
-      metadataMonths, metadataTabs, openSections, toggleSection, isSectionOpen,
-      persist, addProject, deleteProject, getProjectStatus, openEditProject,
-      openExecution, goToDashboard, exportJson, importJsonReplaceAll, connectFolder,
-      connectSpreadsheet, loadMetadata, addMappingRow, updateMappingLabel,
-      deleteMappingRow, saveProject, countPdfs, runScan, forceRescan, openConflictModal,
-      closeConflictModal, applyConflictResolution, editFileAmount, finalizeAndDownload, showError,
-      formatCacheTime, t, setLang
-    };
+      state,
+      currentView,
+      editingProject,
+      execProject,
+      runResult,
+      isRunning,
+      error,
+      successMsg,
+      importText,
+      showAdvanced,
+      excelMetadata,
+      loadingMetadata,
+      newFolderName,
+      showAddMapping,
+      pdfCount,
+      conflictIdx,
+      conflictSelectedAmount,
+      conflictManualAmount,
+      execStep,
+      pdfBlobUrl,
+      pdfZoom,
+      showPdf,
+      pdfLoading,
+      scanCacheTimestamp,
+      scanProgress,
+      lastManualEntry,
+      showShortcuts,
+      lang,
+      projects,
+      currentConflict,
+      unresolvedConflicts,
+      allResolved,
+      groupedResults,
+      finalizeTotals,
+      grandTotal,
+      metadataCategories,
+      metadataMonths,
+      metadataTabs,
+      openSections,
+      toggleSection,
+      isSectionOpen,
+      persist,
+      addProject,
+      deleteProject,
+      getProjectStatus,
+      openEditProject,
+      openExecution,
+      goToDashboard,
+      exportJson,
+      importJsonReplaceAll,
+      connectFolder,
+      connectSpreadsheet,
+      loadMetadata,
+      addMappingRow,
+      updateMappingLabel,
+      deleteMappingRow,
+      saveProject,
+      countPdfs,
+      runScan,
+      forceRescan,
+      openConflictModal,
+      closeConflictModal,
+      applyConflictResolution,
+      editFileAmount,
+      finalizeAndDownload,
+      showError,
+      formatCacheTime,
+      t,
+      setLang
+    }
   },
   template: `
 <div style="min-height:100vh;padding:1rem 1.5rem;max-width:1100px;margin:0 auto">
@@ -1103,163 +1245,202 @@ createApp({
 
 </div>
   `
-}).mount('#app');
+}).mount('#app')
 
 // ---- Helper functions ----
 
 function loadState() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
     return {
       serverUrl: parsed.serverUrl || '',
       projects: Array.isArray(parsed.projects) ? parsed.projects : [],
       currentProjectId: parsed.currentProjectId || null,
       uiSettings: parsed.uiSettings || {}
-    };
+    }
   } catch {
-    return { serverUrl: '', projects: [], currentProjectId: null, uiSettings: {} };
+    return { serverUrl: '', projects: [], currentProjectId: null, uiSettings: {} }
   }
 }
 
 async function gatherPdfFiles(folderHandle, base = '') {
-  const files = [];
-  for await (const [name, handle] of folderHandle.entries()) {
-    const rel = base ? base + '/' + name : name;
-    if (handle.kind === 'directory') {
-      files.push(...(await gatherPdfFiles(handle, rel)));
-    } else if (handle.kind === 'file' && name.toLowerCase().endsWith('.pdf')) {
-      const file = await handle.getFile();
-      files.push({ relativePath: rel, blob: file });
+  console.log('gatherPdfFiles: starting with base:', base)
+  const files = []
+  try {
+    for await (const [name, handle] of folderHandle.entries()) {
+      const rel = base ? base + '/' + name : name
+      try {
+        if (handle.kind === 'directory') {
+          const subFiles = await gatherPdfFiles(handle, rel)
+          files.push(...subFiles)
+        } else if (handle.kind === 'file' && name.toLowerCase().endsWith('.pdf')) {
+          const file = await handle.getFile()
+          files.push({ relativePath: rel, blob: file })
+        }
+      } catch (e) {
+        console.warn('gatherPdfFiles: skipping entry due to error:', rel, e.name, e.message)
+      }
     }
+  } catch (e) {
+    console.error('gatherPdfFiles: failed to list entries for base:', base, e.name, e.message)
   }
-  return files;
+  console.log('gatherPdfFiles: found', files.length, 'files at base:', base || '(root)')
+  return files
 }
 
 async function getSpreadsheetFile(project) {
-  const handle = await getHandle(project?.fileAccess?.spreadsheetHandleKey || '');
-  return handle ? handle.getFile() : null;
+  const handle = await getHandle(project?.fileAccess?.spreadsheetHandleKey || '')
+  return handle ? handle.getFile() : null
 }
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(HANDLE_DB_NAME, 1);
+    const request = indexedDB.open(HANDLE_DB_NAME, 1)
     request.onupgradeneeded = () => {
-      request.result.createObjectStore('handles');
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+      request.result.createObjectStore('handles')
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
 }
 
 function buildCategoryRowsMap(mapping, categories) {
-  const rows = {};
+  const rows = {}
   for (const label of Object.values(mapping || {})) {
-    if (!label) continue;
-    const row = categories?.[label]?.row;
-    if (row) rows[label] = row;
+    if (!label) continue
+    const row = categories?.[label]?.row
+    if (row) rows[label] = row
   }
-  return rows;
+  return rows
 }
 
 async function saveHandle(key, handle) {
-  if (!key) return;
-  const db = await openDb();
+  if (!key) return
+  const db = await openDb()
   await new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').put(handle, key);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+    const tx = db.transaction('handles', 'readwrite')
+    tx.objectStore('handles').put(handle, key)
+    tx.oncomplete = resolve
+    tx.onerror = () => reject(tx.error)
+  })
 }
 
 async function getHandle(key) {
-  if (!key) return null;
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readonly');
-    const req = tx.objectStore('handles').get(key);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
+  if (!key) return null
+  const db = await openDb()
+  const handle = await new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly')
+    const req = tx.objectStore('handles').get(key)
+    req.onsuccess = () => resolve(req.result || null)
+    req.onerror = () => reject(req.error)
+  })
+  if (!handle) return null
+  console.log('getHandle: got handle, kind:', handle.kind)
+  try {
+    if (handle.queryPermission) {
+      console.log('getHandle: has queryPermission')
+      const perm = await handle.queryPermission({ mode: 'readwrite' })
+      console.log('getHandle: queryPermission result:', perm)
+      if (perm === 'granted') return handle
+      if (perm === 'prompt') {
+        const newPerm = await handle.requestPermission({ mode: 'readwrite' })
+        console.log('getHandle: requestPermission result:', newPerm)
+        return newPerm === 'granted' ? handle : null
+      }
+      return null
+    } else if (handle.requestPermission) {
+      console.log('getHandle: has requestPermission only')
+      const perm = await handle.requestPermission({ mode: 'readwrite' })
+      console.log('getHandle: requestPermission result:', perm)
+      return perm === 'granted' ? handle : null
+    } else {
+      console.log('getHandle: no permission methods found, trying to use handle directly')
+    }
+  } catch (e) {
+    console.error('getHandle: permission error:', e)
+  }
+  return handle
 }
 
 async function findFileInFolder(folderHandle, relativePath) {
-  const parts = relativePath.split(/[\\/]/).filter(Boolean);
-  let current = folderHandle;
+  const parts = relativePath.split(/[\\/]/).filter(Boolean)
+  let current = folderHandle
   for (let i = 0; i < parts.length - 1; i++) {
     try {
-      current = await current.getDirectoryHandle(parts[i]);
+      current = await current.getDirectoryHandle(parts[i])
     } catch {
-      return null;
+      return null
     }
   }
   try {
-    return await current.getFileHandle(parts[parts.length - 1]);
+    return await current.getFileHandle(parts[parts.length - 1])
   } catch {
-    return null;
+    return null
   }
 }
 
 function openScanCacheDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(SCAN_CACHE_DB, 1);
+    const request = indexedDB.open(SCAN_CACHE_DB, 1)
     request.onupgradeneeded = () => {
-      request.result.createObjectStore('cache');
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+      request.result.createObjectStore('cache')
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
 }
 
 async function getScanCache(projectId) {
-  const db = await openScanCacheDb();
+  const db = await openScanCacheDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('cache', 'readonly');
-    const req = tx.objectStore('cache').get('scan:' + projectId);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
+    const tx = db.transaction('cache', 'readonly')
+    const req = tx.objectStore('cache').get('scan:' + projectId)
+    req.onsuccess = () => resolve(req.result || null)
+    req.onerror = () => reject(req.error)
+  })
 }
 
 async function saveScanCache(projectId, summary) {
-  const db = await openScanCacheDb();
+  const db = await openScanCacheDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('cache', 'readwrite');
-    tx.objectStore('cache').put({ summary, timestamp: Date.now() }, 'scan:' + projectId);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+    const tx = db.transaction('cache', 'readwrite')
+    tx.objectStore('cache').put({ summary, timestamp: Date.now() }, 'scan:' + projectId)
+    tx.oncomplete = resolve
+    tx.onerror = () => reject(tx.error)
+  })
 }
 
 async function clearScanCache(projectId) {
-  const db = await openScanCacheDb();
+  const db = await openScanCacheDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('cache', 'readwrite');
-    tx.objectStore('cache').delete('scan:' + projectId);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+    const tx = db.transaction('cache', 'readwrite')
+    tx.objectStore('cache').delete('scan:' + projectId)
+    tx.oncomplete = resolve
+    tx.onerror = () => reject(tx.error)
+  })
 }
 
 async function restoreHandlePermissions() {
   try {
-    const db = await openDb();
+    const db = await openDb()
     await new Promise((resolve) => {
-      const tx = db.transaction('handles', 'readonly');
-      const req = tx.objectStore('handles').getAll();
+      const tx = db.transaction('handles', 'readonly')
+      const req = tx.objectStore('handles').getAll()
       req.onsuccess = async () => {
-        const handles = req.result || [];
+        const handles = req.result || []
         for (const handle of handles) {
-          if (!handle?.queryPermission) continue;
-          const status = await handle.queryPermission({ mode: 'read' });
+          if (!handle?.queryPermission) continue
+          const status = await handle.queryPermission({ mode: 'read' })
           if (status !== 'granted') {
-            try { await handle.requestPermission({ mode: 'read' }); } catch {}
+            try {
+              await handle.requestPermission({ mode: 'read' })
+            } catch {}
           }
         }
-        resolve();
-      };
-      req.onerror = () => resolve();
-    });
+        resolve()
+      }
+      req.onerror = () => resolve()
+    })
   } catch {
     // IndexedDB not available
   }
