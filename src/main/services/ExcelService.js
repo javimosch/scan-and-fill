@@ -1,8 +1,63 @@
 import ExcelJS from 'exceljs';
 import XLSX from 'xlsx';
+import JSZip from 'jszip';
 import fs from 'fs';
 import path from 'path';
 import { ScannerService } from './ScannerService.js';
+
+// ---- Surgical ODS cell editing (preserves external-link sheets, formulas,
+// cached values and XML namespaces; avoids SheetJS's 31-char sheet-name limit
+// which crashes on externally-linked spreadsheets). See issue #2. ----
+function odsFloatCell(v) {
+  const n = Math.round(v * 100) / 100;
+  return `<table:table-cell office:value-type="float" office:value="${n}"><text:p>${n.toFixed(2)}</text:p></table:table-cell>`;
+}
+function odsStripRepeat(cellXml) {
+  return cellXml.replace(/\s*table:number-columns-repeated="\d+"/, '');
+}
+function editOdsRowCells(attrs, inner, colEdits) {
+  const cellRe = /<table:(table-cell|covered-table-cell)\b([^>]*?)(\/>|>[\s\S]*?<\/table:\1>)/g;
+  let out = '', lastIdx = 0, colNum = 0, m;
+  while ((m = cellRe.exec(inner)) !== null) {
+    const cellFull = m[0];
+    const repM = m[2].match(/table:number-columns-repeated="(\d+)"/);
+    const rep = repM ? parseInt(repM[1], 10) : 1;
+    const startCol = colNum, endCol = colNum + rep - 1;
+    colNum += rep;
+    const targets = Object.keys(colEdits).map(Number).filter((c) => c >= startCol && c <= endCol);
+    if (!targets.length) continue;
+    out += inner.slice(lastIdx, m.index);
+    for (let c = startCol; c <= endCol; c++) {
+      out += colEdits[c] !== undefined ? odsFloatCell(colEdits[c]) : odsStripRepeat(cellFull);
+    }
+    lastIdx = m.index + cellFull.length;
+  }
+  out += inner.slice(lastIdx);
+  return `<table:table-row${attrs}>${out}</table:table-row>`;
+}
+function editOdsCells(xml, sheetName, edits) {
+  const tableRe = new RegExp('(<table:table\\b[^>]*table:name="' + sheetName + '"[^>]*>)([\\s\\S]*?)(</table:table>)');
+  const tm = xml.match(tableRe);
+  if (!tm) throw new Error('Sheet not found in ODS: ' + sheetName);
+  const body = tm[2];
+  const rowRe = /<table:table-row\b([^>]*)>([\s\S]*?)<\/table:table-row>/g;
+  let result = '', lastIdx = 0, rowNum = 0, m;
+  while ((m = rowRe.exec(body)) !== null) {
+    const attrs = m[1], rowInner = m[2];
+    const repM = attrs.match(/table:number-rows-repeated="(\d+)"/);
+    const rep = repM ? parseInt(repM[1], 10) : 1;
+    const startRow = rowNum + 1, endRow = rowNum + rep;
+    rowNum = endRow;
+    const targets = Object.keys(edits).map(Number).filter((r) => r >= startRow && r <= endRow);
+    if (!targets.length) continue;
+    if (rep !== 1) throw new Error('Cannot edit a repeated row (' + startRow + '); add data to a distinct row.');
+    result += body.slice(lastIdx, m.index);
+    result += editOdsRowCells(attrs, rowInner, edits[startRow]);
+    lastIdx = m.index + m[0].length;
+  }
+  result += body.slice(lastIdx);
+  return xml.slice(0, tm.index) + tm[1] + result + tm[3] + xml.slice(tm.index + tm[0].length);
+}
 
 /**
  * Service to interact with Excel and ODS files.
@@ -67,42 +122,50 @@ export default class ExcelService {
   }
 
   async updateODS(filePath, sheetName, mapping, data) {
-    const workbook = XLSX.readFile(filePath, { cellStyles: true, cellNF: true, cellDates: true });
+    const buf = fs.readFileSync(filePath);
+    // Reading is safe (only WRITE rejects >31-char sheet names); use it to find
+    // the base month so column offsets match the header row.
+    const workbook = XLSX.read(buf, { cellStyles: true, cellNF: true, cellDates: true });
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) {
       throw new Error(`Worksheet not found: ${sheetName}`);
     }
 
-    const { monthStartCell, categoryColumn, categoryRows } = mapping;
+    const { monthStartCell, categoryRows } = mapping;
     const start = XLSX.utils.decode_cell(monthStartCell);
-    const startCol = start.c;
-    const startRow = start.r;
-    
-    const startCellAddr = XLSX.utils.encode_cell({r: startRow, c: startCol});
+    const startCellAddr = XLSX.utils.encode_cell({ r: start.r, c: start.c });
     const baseMonthValue = worksheet[startCellAddr] ? worksheet[startCellAddr].v.toString() : '';
-    
+
     const scanner = new ScannerService();
     const baseMonthInfo = scanner.identifyMonth(baseMonthValue);
     const baseMonthIdx = baseMonthInfo ? baseMonthInfo.index : 0;
 
+    // Build edits keyed by { rowNumber(1-based): { colIndex(0-based): value } }
+    const edits = {};
     for (const [monthName, categories] of Object.entries(data)) {
       const monthInfo = scanner.identifyMonth(monthName);
       if (!monthInfo) continue;
-
-      const currentMonthIdx = monthInfo.index;
-      const colOffset = currentMonthIdx - baseMonthIdx;
-      const col = startCol + colOffset;
-
+      const col = start.c + (monthInfo.index - baseMonthIdx);
       for (const [categoryName, total] of Object.entries(categories)) {
         const row = categoryRows[categoryName];
-        if (row) {
-          const addr = XLSX.utils.encode_cell({r: row - 1, c: col});
-          worksheet[addr] = { v: total, t: 'n', z: '#,##0.00' };
-        }
+        if (!row) continue;
+        (edits[row] = edits[row] || {})[col] = total;
       }
     }
 
-    XLSX.writeFile(workbook, filePath);
+    // Apply via surgical content.xml edit inside the ODS zip.
+    const zip = await JSZip.loadAsync(buf);
+    const contentFile = zip.file('content.xml');
+    if (!contentFile) throw new Error('Invalid ODS file: content.xml missing');
+    let xml = await contentFile.async('string');
+    xml = editOdsCells(xml, sheetName, edits);
+    zip.file('content.xml', xml);
+    // mimetype must stay first and stored uncompressed for a valid ODS
+    if (zip.file('mimetype')) {
+      zip.file('mimetype', await zip.file('mimetype').async('string'), { compression: 'STORE' });
+    }
+    const outBuf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    fs.writeFileSync(filePath, outBuf);
   }
 
   /**

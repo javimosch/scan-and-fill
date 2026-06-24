@@ -30,7 +30,8 @@
     "noProjects": "Aucun projet trouvé. Créez votre premier projet pour commencer.",
     "delete": "Supprimer",
     "forceRescan": "Forcer la Rescan",
-    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce projet ?"
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce projet ?",
+    "review": "Voir / Éditer"
   },
   "projectForm": {
     "title": "Créer un Projet",
@@ -84,6 +85,22 @@
     "done": "Fait",
     "ambiguous": "Ambigu",
     "failed": "Échoué",
+    "successRate": "Taux de réussite",
+    "scopeMapping": "Analyser le mapping uniquement",
+    "scopeMappingDesc": "Analyser les dossiers et vérifier le mapping des catégories sans lire les PDF (rapide).",
+    "analyzeMapping": "Analyser le mapping",
+    "mappingTitle": "Analyse du mapping des catégories",
+    "mappingSummary": "{{mapped}} catégories sur {{total}} mappées vers une ligne du tableur",
+    "mapped": "Mappé",
+    "unmapped": "Non mappé",
+    "category": "Catégorie",
+    "filesCount": "fichiers",
+    "excelRow": "Ligne",
+    "skipCategory": "Ignorer la catégorie",
+    "applyAnyway": "Appliquer quand même",
+    "pendingWarning": "{{count}} élément(s) non résolu(s) seront comptés comme 0.",
+    "loadingProject": "Chargement du projet…",
+    "reviewLoaded": "{{count}} fichiers chargés — éditer, corriger ou appliquer sans re-scanner",
     "months": [
       "Janvier",
       "Février",
@@ -114,7 +131,8 @@
     "remaining": "restant(s)",
     "context": "Contexte",
     "zoomIn": "Zoom Avant",
-    "zoomOut": "Zoom Arrière"
+    "zoomOut": "Zoom Arrière",
+    "reExtract": "Ré-extraire"
   },
   "scan": {
     "selectFolder": "Sélectionner Dossier Projet",

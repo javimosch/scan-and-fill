@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink, Brain, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, X, Info, ZoomIn, ZoomOut, FileText, ExternalLink, Brain, Loader2, RefreshCw } from 'lucide-react'
 
-export default function ConflictResolverWithPDF({ conflict, remainingConflicts, onResolve, onCancel }) {
+export default function ConflictResolverWithPDF({ conflict, remainingConflicts, onResolve, onReExtract, onCancel }) {
     const { t } = useTranslation()
     const [selectedAmount, setSelectedAmount] = useState('')
     const [manualAmount, setManualAmount] = useState('')
@@ -16,6 +16,28 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
     const [aiResult, setAiResult] = useState(null)
     const [aiError, setAiError] = useState('')
     const [aiLoadingStage, setAiLoadingStage] = useState('') // 'extracting' or 'analyzing'
+    const [liveCandidates, setLiveCandidates] = useState(null) // from on-demand re-extract
+    const [reExtracting, setReExtracting] = useState(false)
+
+    // candidates currently shown: a fresh re-extract overrides the stored ones
+    const candidates = liveCandidates ?? conflict.candidates ?? []
+
+    const handleReExtract = async () => {
+        if (!onReExtract) return
+        setReExtracting(true)
+        try {
+            const r = await onReExtract(conflict.filePath)
+            setLiveCandidates(r.candidates || [])
+            if (r.status === 'success' && typeof r.amount === 'number') {
+                setSelectedAmount(r.amount.toString())
+                setManualAmount('')
+            }
+        } catch (e) {
+            console.warn('Re-extract failed:', e)
+        } finally {
+            setReExtracting(false)
+        }
+    }
 
     useEffect(() => {
         const loadLastEntry = async () => {
@@ -268,7 +290,15 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
 
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                                    <h4 style={{ margin: 0 }}>{t('conflictResolver.candidates')}</h4>
+                                    <div className="flex" style={{ gap: '0.6rem', alignItems: 'center' }}>
+                                        <h4 style={{ margin: 0 }}>{t('conflictResolver.candidates')}</h4>
+                                        {onReExtract && (
+                                            <button className="btn-ghost flex" onClick={handleReExtract} disabled={reExtracting} title={t('conflictResolver.reExtract')} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', gap: '0.3rem' }}>
+                                                {reExtracting ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                                                {t('conflictResolver.reExtract')}
+                                            </button>
+                                        )}
+                                    </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('conflictResolver.context')}:</label>
                                         <input
@@ -284,10 +314,10 @@ export default function ConflictResolverWithPDF({ conflict, remainingConflicts, 
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {conflict.candidates.length === 0 && (
+                                    {candidates.length === 0 && (
                                         <p style={{ opacity: 0.5, fontStyle: 'italic' }}>{t('conflictResolver.noCandidates')}</p>
                                     )}
-                                    {conflict.candidates.map((c, idx) => (
+                                    {candidates.map((c, idx) => (
                                         <label
                                             key={idx}
                                             style={{

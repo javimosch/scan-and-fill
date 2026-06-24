@@ -6,6 +6,7 @@ import pdfParse from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import { app } from 'electron';
 import CacheService from './CacheService.js';
+import { extractHTFromText } from './PublisherExtractor.js';
 import AIDetectionService from './AIDetectionService.js';
 import SettingsService from './SettingsService.js';
 import LoggingService from './LoggingService.js';
@@ -155,6 +156,27 @@ export default class ParserService {
             this._logger.logOCRFailure(filePath, ocrError, 1);
             throw ocrError;
           }
+      }
+
+      // HT-focused extraction (per-publisher templates, doc-type, derive, guard).
+      // Confident results short-circuit; statements are excluded; everything else
+      // falls through to the generic candidate finder for manual resolution.
+      const inv = extractHTFromText(text, path.basename(filePath), { expectedRate: options.expectedRate });
+      if (inv.status === 'skip') {
+        this._logger.info(`Excluded (statement/payment-notice): ${path.basename(filePath)}`);
+        return { status: 'skip', amount: 0, candidates: [], message: inv.message, excluded: true, method: 'ht' };
+      }
+      if (inv.status === 'ok' || inv.status === 'avoir') {
+        const ht = Math.round(inv.ht * 100) / 100;
+        const amount = inv.status === 'avoir' ? -ht : ht;
+        this._logger.info(`HT extracted (${inv.status}) for ${path.basename(filePath)}: ${amount}`);
+        return {
+          status: 'success',
+          amount,
+          candidates: [{ amount, context: `${inv.message}${inv.publisher ? ' [' + inv.publisher + ']' : ''}` }],
+          message: inv.message + (inv.status === 'avoir' ? ' (avoir, subtracted)' : ''),
+          method: 'ht'
+        };
       }
 
       let result = this.findAmountInText(text, options.pattern);
@@ -525,25 +547,28 @@ export default class ParserService {
     }
 
     const lines = text.split('\n');
+    // HT-FIRST tiers (client wants HT, not TTC): HT-style totals are supreme (3),
+    // amount-due strong (2), TTC secondary (1).
     const supremeKeywords = [
-        'total ttc', 'ttc', 'net a payer', 'net à payer', 'total à payer', 'total a payer',
-        'net à régler', 'net a régler', 'à payer', 'a payer', 'total à régler', 'total a régler',
-        'net a payer en €', 'net à payer en €', 'montant ttc', 'total eur ttc', 'total eur',
-        'a votre debit', 'total net a payer', 'total net ttc', 'net a payer ttc', 
-        'net a payer ttc en euros', 'net à payer ttc en euros'
+        'total ht', 'net ht', 'hors taxe', 'total net ht', 'montant ht',
+        'total ht net', 'total marchandise', 'total hors taxe', 'sous-total ht',
+        'sous total ht', 'base ht', 'montant hors taxe', 'net hors taxe'
     ];
     const strongKeywords = [
         'total due', 'amount due', 'balance due', 'total facturado', 'total factura',
         'total general', 'amount', 'montant', 'importe', 'sum', 'total:',
-        'payer', 'regler'
+        'payer', 'regler', 'net a payer', 'net à payer', 'total à payer', 'total a payer',
+        'à payer', 'a payer', 'a votre debit'
     ];
     const secondaryKeywords = [
-        'total ht', 'net ht', 'hors taxe', 'total net ht', 'ht', 'total ht net', 'total marchandise'
+        'total ttc', 'ttc', 'montant ttc', 'total eur ttc', 'total eur',
+        'net a payer ttc', 'total net ttc', 'net à régler', 'net a régler',
+        'total à régler', 'total a régler'
     ];
     const genericKeywords = [
         'total', 'net'
     ];
-    const subtotalKeywords = [...secondaryKeywords]; // Keywords that definitely mean "subtotal/HT"
+    const subtotalKeywords = []; // HT is now supreme, so no HT->subtotal demotion
     
     // Words that indicate this is NOT a monetary total
     const ignoreWords = [

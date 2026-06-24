@@ -246,6 +246,18 @@ app.whenReady().then(() => {
     return mainService.finalizeProcess(project, summary)
   })
 
+  ipcMain.handle('cache-resolution', (_, projectId, filePath, amount) => {
+    return mainService.cacheResolution(projectId, filePath, amount)
+  })
+
+  ipcMain.handle('load-project-state', (_, project) => {
+    return mainService.loadCachedState(project)
+  })
+
+  ipcMain.handle('extract-single-file', (_, project, filePath) => {
+    return mainService.extractSingleFile(project, filePath)
+  })
+
   ipcMain.handle('clear-project-cache', (_, projectId) => {
     mainService.cache.clearCache(projectId)
   })

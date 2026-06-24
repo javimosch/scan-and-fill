@@ -10,6 +10,10 @@ const api = {
     ipcRenderer.invoke('get-excel-metadata', filePath, sheetName, categoryColumn, monthStartCell),
   runProject: (project) => ipcRenderer.invoke('run-project', project),
   finalizeProject: (project, summary) => ipcRenderer.invoke('finalize-project', project, summary),
+  cacheResolution: (projectId, filePath, amount) =>
+    ipcRenderer.invoke('cache-resolution', projectId, filePath, amount),
+  loadProjectState: (project) => ipcRenderer.invoke('load-project-state', project),
+  extractSingleFile: (project, filePath) => ipcRenderer.invoke('extract-single-file', project, filePath),
   clearProjectCache: (projectId) => ipcRenderer.invoke('clear-project-cache', projectId),
   onProgress: (callback) => {
     const subscription = (_event, progress) => callback(progress)

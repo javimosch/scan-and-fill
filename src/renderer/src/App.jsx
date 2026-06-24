@@ -7,6 +7,7 @@ function App() {
   const [screen, setScreen] = useState('dashboard')
   const [projects, setProjects] = useState([])
   const [currentProject, setCurrentProject] = useState(null)
+  const [reviewMode, setReviewMode] = useState(false)
 
   useEffect(() => {
     loadProjects()
@@ -45,6 +46,13 @@ function App() {
 
   const handleRunProject = (project) => {
     setCurrentProject(project)
+    setReviewMode(false)
+    setScreen('execution')
+  }
+
+  const handleReviewProject = (project) => {
+    setCurrentProject(project)
+    setReviewMode(true)
     setScreen('execution')
   }
 
@@ -82,6 +90,7 @@ function App() {
             onEdit={handleEditProject}
             onDelete={handleDeleteProject}
             onRun={handleRunProject}
+            onReview={handleReviewProject}
           />
         )}
         {screen === 'project-form' && (
@@ -94,6 +103,7 @@ function App() {
         {screen === 'execution' && (
           <ExecutionView
             project={currentProject}
+            reviewMode={reviewMode}
             onClose={() => setScreen('dashboard')}
           />
         )}

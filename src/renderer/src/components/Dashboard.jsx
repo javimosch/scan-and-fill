@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
-import { Folder, Plus, Edit2, Trash2, Play, RefreshCw, Settings } from 'lucide-react'
+import { Folder, Plus, Edit2, Trash2, Play, RefreshCw, Settings, ClipboardList } from 'lucide-react'
 import LanguageSelector from './LanguageSelector';
 import SettingsModal from './SettingsModal';
 
-export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun }) {
+export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun, onReview }) {
     const { t } = useTranslation();
     const [showSettings, setShowSettings] = useState(false);
 
@@ -58,6 +58,14 @@ export default function Dashboard({ projects, onCreate, onEdit, onDelete, onRun 
                                 >
                                     <Play size={16} />
                                     {t('scan.startScan')}
+                                </button>
+                                <button
+                                    className="btn-ghost flex"
+                                    title={t('dashboard.review')}
+                                    onClick={() => onReview(project)}
+                                >
+                                    <ClipboardList size={16} />
+                                    {t('dashboard.review')}
                                 </button>
                                 <button
                                     className="btn-ghost"
