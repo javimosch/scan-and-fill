@@ -25,7 +25,7 @@ function num(s) {
 
 export function classifyDocument(fileName) {
   const n = fileName.toUpperCase();
-  if (/AVIS DE PAIE?MENT|EXTRAIT DE COMPTE|RELEVE DE FACTURATION|JUSTIFICATIF|AVIS DE PAIMENT/.test(n))
+  if (/AVIS DE PAIE?MENT|EXTRAIT DE COMPTE|RELEVE DE FACTURATION|JUSTIFICATIF|AVIS DE PAIMENT|LCR\.PDF$/.test(n))
     return 'statement';
   const m = n.match(/ ([A-Z])([0-9]?)\.PDF$/);
   if (m) {
@@ -64,8 +64,15 @@ function htSODIS(t) {
   return NaN;
 }
 function htINTERFORUM(t) {
-  const m = t.match(new RegExp('TOTAL GENERAL HT\\s*:?\\s*' + NUM, 'i'));
-  return m ? num(m[1]) : NaN;
+  // value-after (some layouts): "TOTAL GENERAL HT : 121,31"
+  let m = t.match(new RegExp('TOTAL GENERAL HT\\s*:?\\s*' + NUM, 'i'));
+  if (m) return num(m[1]);
+  // value-before (March layout): "265,89   TOTAL  HORS TAXE" / "...TOTAL MARCHANDISES"
+  m = t.match(new RegExp(NUM + '\\s+TOTAL\\s+HORS\\s+TAXE', 'i'));
+  if (m) return num(m[1]);
+  m = t.match(new RegExp(NUM + '\\s+TOTAL\\s+MARCHANDISES', 'i'));
+  if (m) return num(m[1]);
+  return NaN;
 }
 function htHARMONIA(t) {
   // "Total marchandise <qty> <amount>" — take the LAST decimal amount on that line
@@ -86,9 +93,19 @@ function htDG(t) {
   return NaN;
 }
 
+function htBLDD(t) {
+  // delivery-note / avoir: "Total Bon de livraison HT 59,05"
+  let m = t.match(new RegExp('Total Bon de livraison\\s*HT\\s*' + NUM, 'i'));
+  if (m) return num(m[1]);
+  // billing statement (relevé): only a TTC "Total 266,99 €" -> HT (books = 5.5%)
+  const all = [...t.matchAll(new RegExp('Total\\s*' + NUM + '\\s*€', 'ig'))];
+  if (all.length) return num(all[all.length - 1][1]) / 1.055;
+  return NaN;
+}
+
 const HT_FN = {
   MDS: htMDS, DILISCO: htDILISCO, SODIS: htSODIS, INTERFORUM: htINTERFORUM,
-  'DG DIFFUSION': htDG, DG: htDG, 'HARMONIA MUNDI': htHARMONIA
+  'DG DIFFUSION': htDG, DG: htDG, 'HARMONIA MUNDI': htHARMONIA, BLDD: htBLDD
 };
 
 function htGeneric(t) {
@@ -159,11 +176,9 @@ export function extractHTFromText(text, fileName, opts = {}) {
   if (isNaN(ht) || ht <= 0) {
     return { status: 'review', type, publisher, ht: 0, ttc, message: 'no HT total found' };
   }
-  // rate > 1.30 means HT is suspiciously low vs TTC (mixed-rate/subtotal) -> review.
-  // rate < 1.0 just means the detected TTC is unreliable -> trust the labeled HT.
-  if (!isNaN(rate) && rate > 1.30) {
-    return { status: 'review', type, publisher, ht, ttc, message: `HT/TTC sanity failed (rate=${rate.toFixed(2)})` };
-  }
+  // We trust an explicitly-labelled HT (template / HT-label) even if findTTC is
+  // unreliable, so there's no rate-based veto. The magnitude guard below still
+  // catches OCR digit-merges (e.g. Harmonia "Total marchandise").
   if (ht > MAX_PLAUSIBLE_HT && (isNaN(rate) || rate < 1.0 || rate > 1.30)) {
     return { status: 'review', type, publisher, ht: 0, ttc, message: `implausibly large HT (${ht.toFixed(2)}, likely OCR error) — needs manual check` };
   }
