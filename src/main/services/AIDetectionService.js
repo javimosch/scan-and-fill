@@ -147,8 +147,29 @@ export default class AIDetectionService {
    * Build prompt for OpenRouter API
    */
   buildPrompt(text, context) {
-    // Ultra-short prompt for free model to minimize token usage
-    return `Amount from: ${text.substring(0, 200)}
+    // Give the model more of the garbled OCR text so it can reason about
+    // structure and context, while staying within free model token budgets.
+    const maxTextLength = 3000;
+    const truncated = text.length > maxTextLength
+      ? text.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
+      : text;
+
+    return `You are extracting the final total payable amount from a poorly OCR-scanned invoice or receipt.
+
+File: ${context?.fileName || 'unknown'}
+Pages: ${context?.pageCount || 1}
+
+OCR text (may contain errors):
+"""
+${truncated}
+"""
+
+Instructions:
+- Return exactly one line: AMOUNT: <currency><number> or AMOUNT: NOT_FOUND
+- Prefer the final total, e.g. "net a payer", "total TTC", "total due", or "amount".
+- Ignore account numbers, IBAN, SIRET, dates, phone numbers, quantities, and percentages.
+- Do not use thousands separators; use a dot or comma only as the decimal separator.
+
 Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
@@ -233,35 +254,46 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   parseResponse(response) {
     const cleaned = response.trim();
     console.log('[AIDetectionService] Parsing AI response:', cleaned);
-    
+
     // Check for NOT_FOUND response
-    if (cleaned === 'AMOUNT: NOT_FOUND' || cleaned.toLowerCase().includes('not_found')) {
+    if (cleaned.toLowerCase().includes('not_found')) {
       return { status: 'failed', amount: 0, candidates: [], message: 'AI could not find amount' };
     }
 
-    // Multiple regex patterns to catch various formats
-    const patterns = [
-      // Structured format: AMOUNT: €123.45
-      /AMOUNT:\s*([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Structured format: AMOUNT: 123.45€
-      /AMOUNT:\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Original format: €123.45
-      /([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Original format: 123.45€
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Just numbers as fallback
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i
+    // Prefer a structured "AMOUNT: <value>" line and parse the value directly.
+    const amountLineMatch = cleaned.match(/^AMOUNT:\s*(.+)$/im);
+    if (amountLineMatch) {
+      const amountStr = amountLineMatch[1].trim();
+      console.log('[AIDetectionService] Extracted amount string from AMOUNT line:', amountStr);
+
+      const numericAmount = this.parseAmountString(amountStr);
+
+      if (numericAmount > 0) {
+        return {
+          status: 'success',
+          amount: numericAmount,
+          candidates: [numericAmount],
+          message: `AI detected amount: ${amountStr}`
+        };
+      }
+    }
+
+    // Fallback: look for any number near a currency symbol.
+    const fallbackPatterns = [
+      /([$€£]\s*\d[\d\s.,]*)/,
+      /(\d[\d\s.,]*\s*[$€£])/,
+      /(\d[\d.,]+)/
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of fallbackPatterns) {
       const match = cleaned.match(pattern);
       if (match) {
         const amountStr = match[1];
         console.log('[AIDetectionService] Regex matched pattern:', pattern.toString());
         console.log('[AIDetectionService] Extracted amount string:', amountStr);
-        
+
         const numericAmount = this.parseAmountString(amountStr);
-        
+
         if (numericAmount > 0) {
           return {
             status: 'success',
@@ -278,17 +310,45 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
   /**
-   * Parse amount string to number
+   * Parse amount string to number.
+   * Handles both European (1.234,56) and US/UK (1,234.56) formats, as well
+   * as plain integers and 2-decimal values.
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    const cleaned = amountStr.replace(/[$€£\s]/g, '');
-    
-    // Handle both comma and decimal separators
-    const normalized = cleaned.replace(/,/g, '.');
-    
-    const amount = parseFloat(normalized);
-    
+    let raw = amountStr.replace(/[$€£\s]/g, '');
+    if (!/[\d.,]/.test(raw)) {
+      return 0;
+    }
+
+    const dotIndex = raw.lastIndexOf('.');
+    const commaIndex = raw.lastIndexOf(',');
+    const lastSepIndex = Math.max(dotIndex, commaIndex);
+
+    if (dotIndex !== -1 && commaIndex !== -1) {
+      // Both separators present: the rightmost one is the decimal separator.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+      raw = `${integer}.${fractional}`;
+    } else if (lastSepIndex !== -1) {
+      // Only one separator: use the number of trailing digits to decide.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+
+      if (fractional.length === 2) {
+        // Two trailing digits -> decimal separator.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length === 3) {
+        // Three trailing digits -> thousands separator (currency rarely uses 3 decimals).
+        raw = integer + fractional;
+      } else {
+        // 1, 4+, or missing trailing digits -> use as decimal separator.
+        raw = `${integer}.${fractional}`;
+      }
+    }
+
+    const amount = parseFloat(raw);
+
     return isNaN(amount) ? 0 : amount;
   }
 
