@@ -303,13 +303,19 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    const cleaned = amountStr.replace(/[$€£\s]/g, '');
-    
-    // Handle both comma and decimal separators
-    const normalized = cleaned.replace(/,/g, '.');
-    
-    const amount = parseFloat(normalized);
-    
+    let raw = amountStr.replace(/[$€£\s]/g, '');
+
+    // Handle European format like "1.234,56" -> "1234.56".
+    // When both separators are present the comma is the decimal separator
+    // and dots are thousands separators.
+    if (raw.includes('.') && raw.includes(',')) {
+      raw = raw.replace(/\./g, '').replace(',', '.');
+    } else if (raw.includes(',')) {
+      raw = raw.replace(',', '.');
+    }
+
+    const amount = parseFloat(raw);
+
     return isNaN(amount) ? 0 : amount;
   }
 
