@@ -182,6 +182,7 @@ export default class ParserService {
               ...aiResult,
               method: 'ai',
               fallback: true,
+              aiExtracted: true,
               originalResult: result
             };
           } else {
