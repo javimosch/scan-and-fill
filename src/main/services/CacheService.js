@@ -15,8 +15,9 @@ export default class CacheService {
     
     this.cacheDir = path.join(userDataPath, 'pdf-cache');
     this.ocrCacheDir = path.join(this.cacheDir, 'ocr');
+    this.aiCacheDir = path.join(this.cacheDir, 'ai');
     this.manualEntriesPath = path.join(this.cacheDir, 'manual-entries.json');
-    
+
     // Ensure cache directories exist
     this.ensureCacheDirectories();
   }
@@ -27,6 +28,9 @@ export default class CacheService {
     }
     if (!fs.existsSync(this.ocrCacheDir)) {
       fs.mkdirSync(this.ocrCacheDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.aiCacheDir)) {
+      fs.mkdirSync(this.aiCacheDir, { recursive: true });
     }
   }
 
@@ -189,6 +193,86 @@ export default class CacheService {
         totalSize: '0 KB',
         lastUpdated: null
       };
+    }
+  }
+
+  /**
+   * Get cached AI detection result by key
+   */
+  getAIDetectionCache(key) {
+    try {
+      const cachePath = path.join(this.aiCacheDir, `${key}.json`);
+      if (fs.existsSync(cachePath)) {
+        const data = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+        console.log(`[CacheService] AI detection cache hit for ${key.substring(0, 16)}...`);
+        return data.result;
+      }
+    } catch (error) {
+      console.warn(`[CacheService] Failed to read AI detection cache:`, error.message);
+    }
+    return null;
+  }
+
+  /**
+   * Save AI detection result to cache
+   */
+  setAIDetectionCache(key, result) {
+    try {
+      if (!fs.existsSync(this.aiCacheDir)) {
+        fs.mkdirSync(this.aiCacheDir, { recursive: true });
+      }
+
+      const cachePath = path.join(this.aiCacheDir, `${key}.json`);
+      const data = {
+        key,
+        timestamp: new Date().toISOString(),
+        result
+      };
+
+      fs.writeFileSync(cachePath, JSON.stringify(data, null, 2), 'utf8');
+      console.log(`[CacheService] AI detection result cached for ${key.substring(0, 16)}...`);
+    } catch (error) {
+      console.warn(`[CacheService] Failed to save AI detection cache:`, error.message);
+    }
+  }
+
+  /**
+   * Get today's AI detection API call usage
+   */
+  getAIDetectionUsage() {
+    try {
+      const usagePath = path.join(this.cacheDir, 'ai-usage.json');
+      const today = new Date().toISOString().split('T')[0];
+
+      if (fs.existsSync(usagePath)) {
+        const data = JSON.parse(fs.readFileSync(usagePath, 'utf8'));
+        if (data.date === today) {
+          return data;
+        }
+      }
+
+      return { date: today, count: 0 };
+    } catch (error) {
+      console.warn('[CacheService] Failed to read AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
+    }
+  }
+
+  /**
+   * Increment today's AI detection API call count
+   */
+  incrementAIDetectionUsage() {
+    try {
+      const usagePath = path.join(this.cacheDir, 'ai-usage.json');
+      const usage = this.getAIDetectionUsage();
+
+      usage.count += 1;
+      fs.writeFileSync(usagePath, JSON.stringify(usage, null, 2), 'utf8');
+      console.log(`[CacheService] AI detection usage: ${usage.count} calls today`);
+      return usage;
+    } catch (error) {
+      console.warn('[CacheService] Failed to record AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
     }
   }
 

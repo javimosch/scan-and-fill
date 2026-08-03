@@ -140,14 +140,16 @@ export default class ParserService {
       
       const data = await pdfParse(dataBuffer);
       this._logger.debug(`PDF text extracted, length: ${data.text?.length || 0} characters`);
-      
+
+      const pageCount = await this.getPageCount(filePath, data);
+
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
       if (!text || text.trim().length < 50) {
           this._logger.info(`Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR...`);
-          this._logger.logOCRAttempt(filePath, this.getPageCount(filePath), 1);
-          
+          this._logger.logOCRAttempt(filePath, pageCount, 1);
+
           try {
             text = await this.performOCR(filePath);
             this._logger.info(`OCR completed, extracted ${text.length} characters`);
@@ -159,18 +161,18 @@ export default class ParserService {
 
       let result = this.findAmountInText(text, options.pattern);
       this._logger.info(`Amount extraction result: ${result.status}, candidates: ${result.candidates?.length || 0}`);
-      
+
       // AI Detection Fallback
-      if (this._aiDetection.shouldUseFallback(result.status, this.getPageCount(filePath))) {
+      if (this._aiDetection.shouldUseFallback(result.status, pageCount)) {
         this._logger.info(`OCR result: ${result.status}. Triggering AI detection fallback...`);
-        
+
         try {
           const aiSettings = this._settings.getAIDetectionSettings();
           this._aiDetection.initialize(aiSettings);
-          
+
           const pdfContext = {
             fileName: path.basename(filePath),
-            pageCount: this.getPageCount(filePath)
+            pageCount
           };
           
           this._logger.logAIDetectionAttempt(filePath, text.length);
@@ -182,6 +184,7 @@ export default class ParserService {
               ...aiResult,
               method: 'ai',
               fallback: true,
+              aiExtracted: true,
               originalResult: result
             };
           } else {
@@ -490,19 +493,33 @@ export default class ParserService {
   }
 
   /**
-   * Get page count from PDF
+   * Get page count from PDF.
+   * Uses a pdf-parse result when available, otherwise parses the PDF
+   * and falls back to a file-size heuristic for scanned/corrupted docs.
+   * @param {string} filePath
+   * @param {Object} [pdfData] - Optional pdf-parse result to avoid re-parsing.
    */
-  getPageCount(filePath) {
+  async getPageCount(filePath, pdfData = null) {
     try {
-      // Simple page count estimation - in a real implementation you might use pdf-parse to get accurate count
-      // For now, we'll use a simple heuristic based on file size
+      // Reuse an already parsed result when available.
+      if (pdfData && (pdfData.numpages || pdfData.numPages)) {
+        return pdfData.numpages || pdfData.numPages;
+      }
+
+      const dataBuffer = fs.readFileSync(filePath);
+      const data = await pdfParse(dataBuffer);
+
+      if (data && (data.numpages || data.numPages)) {
+        return data.numpages || data.numPages;
+      }
+
+      // Fallback to file-size heuristic for documents where pdf-parse
+      // could not determine the page count.
       const stats = fs.statSync(filePath);
       const sizeInMB = stats.size / (1024 * 1024);
-      
-      // Rough estimate: ~1MB per page for typical PDFs
       return Math.max(1, Math.ceil(sizeInMB));
     } catch (error) {
-      console.warn(`[ParserService] Could not estimate page count: ${error.message}`);
+      console.warn(`[ParserService] Could not get page count: ${error.message}`);
       return 1; // Default to 1 page
     }
   }
