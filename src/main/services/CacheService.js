@@ -237,6 +237,46 @@ export default class CacheService {
   }
 
   /**
+   * Get today's AI detection API call usage
+   */
+  getAIDetectionUsage() {
+    try {
+      const usagePath = path.join(this.cacheDir, 'ai-usage.json');
+      const today = new Date().toISOString().split('T')[0];
+
+      if (fs.existsSync(usagePath)) {
+        const data = JSON.parse(fs.readFileSync(usagePath, 'utf8'));
+        if (data.date === today) {
+          return data;
+        }
+      }
+
+      return { date: today, count: 0 };
+    } catch (error) {
+      console.warn('[CacheService] Failed to read AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
+    }
+  }
+
+  /**
+   * Increment today's AI detection API call count
+   */
+  incrementAIDetectionUsage() {
+    try {
+      const usagePath = path.join(this.cacheDir, 'ai-usage.json');
+      const usage = this.getAIDetectionUsage();
+
+      usage.count += 1;
+      fs.writeFileSync(usagePath, JSON.stringify(usage, null, 2), 'utf8');
+      console.log(`[CacheService] AI detection usage: ${usage.count} calls today`);
+      return usage;
+    } catch (error) {
+      console.warn('[CacheService] Failed to record AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
+    }
+  }
+
+  /**
    * Clear OCR cache (JSON-based)
    */
   async clearOCRCacheJSON() {

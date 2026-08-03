@@ -16,7 +16,8 @@ export default function SettingsModal({ isOpen, onClose }) {
     enabled: false,
     maxPages: 1,
     apiKey: '',
-    model: 'openrouter/free'
+    model: 'openrouter/free',
+    dailyCallLimit: 100
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -255,6 +256,31 @@ export default function SettingsModal({ isOpen, onClose }) {
             />
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               AI detection will only be used for PDFs with this many pages or fewer
+            </p>
+          </div>
+
+          {/* Daily API Call Limit */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Daily API call limit
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              value={aiSettings.dailyCallLimit || 100}
+              onChange={(e) => handleChange('dailyCallLimit', parseInt(e.target.value) || 100)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                backgroundColor: 'var(--background)',
+                color: 'var(--text)'
+              }}
+            />
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Stop AI fallback once this many OpenRouter calls have been made today
             </p>
           </div>
 

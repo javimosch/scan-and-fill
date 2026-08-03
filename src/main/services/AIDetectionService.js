@@ -12,6 +12,7 @@ export default class AIDetectionService {
     this.maxPages = 1;
     this.apiKey = null;
     this.model = 'openrouter/free';
+    this.dailyCallLimit = 100;
     this.settingsPath = null;
     this.cache = new CacheService();
   }
@@ -24,6 +25,7 @@ export default class AIDetectionService {
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
     this.model = settings.model || 'openrouter/free';
+    this.dailyCallLimit = settings.dailyCallLimit || 100;
   }
 
   /**
@@ -43,6 +45,28 @@ export default class AIDetectionService {
   getCacheKey(text, pdfContext = {}) {
     const raw = `${pdfContext.fileName || 'unknown'}:${this.model || 'default'}:${text}`;
     return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
+  /**
+   * Check the daily API call cap before calling OpenRouter
+   */
+  checkDailyCallLimit() {
+    const usage = this.cache.getAIDetectionUsage();
+    if (usage.count >= this.dailyCallLimit) {
+      console.warn(`[AIDetectionService] Daily API call limit reached (${usage.count}/${this.dailyCallLimit})`);
+      return {
+        allowed: false,
+        message: `Daily AI detection limit reached (${usage.count}/${this.dailyCallLimit}). Try again tomorrow or increase the limit in Settings.`
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * Record an API call against the daily cap
+   */
+  recordApiCall() {
+    return this.cache.incrementAIDetectionUsage();
   }
 
   /**
@@ -85,6 +109,12 @@ export default class AIDetectionService {
         };
       }
       
+      const limitCheck = this.checkDailyCallLimit();
+      if (!limitCheck.allowed) {
+        return { status: 'failed', amount: 0, candidates: [], message: limitCheck.message };
+      }
+
+      this.recordApiCall();
       const prompt = this.buildPrompt(text, pdfContext);
       const response = await this.callOpenRouterWithRetry(prompt);
       
@@ -320,7 +350,8 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
       enabled: this.isEnabled,
       maxPages: this.maxPages,
       apiKey: this.apiKey ? '***configured***' : null,
-      model: this.model
+      model: this.model,
+      dailyCallLimit: this.dailyCallLimit
     };
   }
 
