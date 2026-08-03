@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import CacheService from './CacheService.js';
 
 /**
  * AI Detection Service for OCR fallback using OpenRouter API
@@ -11,6 +13,7 @@ export default class AIDetectionService {
     this.apiKey = null;
     this.model = 'openrouter/free';
     this.settingsPath = null;
+    this.cache = new CacheService();
   }
 
   /**
@@ -35,11 +38,26 @@ export default class AIDetectionService {
   }
 
   /**
+   * Generate a cache key for AI detection results
+   */
+  getCacheKey(text, pdfContext = {}) {
+    const raw = `${pdfContext.fileName || 'unknown'}:${this.model || 'default'}:${text}`;
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
+  /**
    * Extract amount from PDF text using AI
    */
   async extractAmountFromText(text, pdfContext = {}) {
     if (!this.isEnabled) {
       throw new Error('AI detection is disabled');
+    }
+
+    const cacheKey = this.getCacheKey(text, pdfContext);
+    const cached = this.cache.getAIDetectionCache(cacheKey);
+    if (cached) {
+      console.log('[AIDetectionService] Returning cached AI result for', pdfContext.fileName || 'unknown');
+      return { ...cached, fromCache: true };
     }
 
     try {
@@ -83,7 +101,9 @@ export default class AIDetectionService {
         };
       }
       
-      return this.parseResponse(response);
+      const result = this.parseResponse(response);
+      this.cache.setAIDetectionCache(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('[AIDetectionService] AI detection failed:', error);
       throw new Error(`AI detection failed: ${error.message}`);
