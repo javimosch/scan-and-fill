@@ -278,17 +278,46 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
   /**
-   * Parse amount string to number
+   * Parse amount string to number.
+   * Handles both European (1.234,56) and US/UK (1,234.56) formats,
+   * including OCR artefacts such as spaces around separators.
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    const cleaned = amountStr.replace(/[$€£\s]/g, '');
-    
-    // Handle both comma and decimal separators
-    const normalized = cleaned.replace(/,/g, '.');
-    
-    const amount = parseFloat(normalized);
-    
+    let raw = amountStr.replace(/[$€£\s]/g, '');
+
+    if (!/[\d.,]/.test(raw)) {
+      return 0;
+    }
+
+    const dotIndex = raw.lastIndexOf('.');
+    const commaIndex = raw.lastIndexOf(',');
+    const lastSepIndex = Math.max(dotIndex, commaIndex);
+
+    if (dotIndex !== -1 && commaIndex !== -1) {
+      // Both separators present: the rightmost one is the decimal separator.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+      raw = `${integer}.${fractional}`;
+    } else if (lastSepIndex !== -1) {
+      // Only one separator: use the number of trailing digits to decide.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+
+      if (fractional.length === 2) {
+        // Two trailing digits -> decimal separator.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length === 3) {
+        // Three trailing digits -> thousands separator (currency rarely uses 3 decimals).
+        raw = integer + fractional;
+      } else {
+        // 1, 4+, or missing trailing digits -> treat as decimal separator.
+        raw = `${integer}.${fractional}`;
+      }
+    }
+
+    const amount = parseFloat(raw);
+
     return isNaN(amount) ? 0 : amount;
   }
 
