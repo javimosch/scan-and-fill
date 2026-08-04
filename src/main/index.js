@@ -350,7 +350,7 @@ app.whenReady().then(() => {
   ipcMain.handle('analyze-with-ai', async (_, filePath, text) => {
     try {
       const aiSettings = settingsService.getAIDetectionSettings()
-      const pageCount = parserService.getPageCount(filePath)
+      const pageCount = await parserService.getPageCount(filePath)
 
       if (!aiSettings.enabled) {
         throw new Error('AI detection is disabled')
