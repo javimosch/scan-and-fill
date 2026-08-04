@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import CacheService from './CacheService.js';
 
 /**
  * AI Detection Service for OCR fallback using OpenRouter API
@@ -10,7 +12,9 @@ export default class AIDetectionService {
     this.maxPages = 1;
     this.apiKey = null;
     this.model = 'openrouter/free';
+    this.dailyCallLimit = 100;
     this.settingsPath = null;
+    this.cache = new CacheService();
   }
 
   /**
@@ -21,6 +25,7 @@ export default class AIDetectionService {
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
     this.model = settings.model || 'openrouter/free';
+    this.dailyCallLimit = settings.dailyCallLimit || 100;
   }
 
   /**
@@ -35,11 +40,48 @@ export default class AIDetectionService {
   }
 
   /**
+   * Generate a cache key for AI detection results
+   */
+  getCacheKey(text, pdfContext = {}) {
+    const raw = `${pdfContext.fileName || 'unknown'}:${this.model || 'default'}:${text}`;
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
+  /**
+   * Check the daily API call cap before calling OpenRouter
+   */
+  checkDailyCallLimit() {
+    const usage = this.cache.getAIDetectionUsage();
+    if (usage.count >= this.dailyCallLimit) {
+      console.warn(`[AIDetectionService] Daily API call limit reached (${usage.count}/${this.dailyCallLimit})`);
+      return {
+        allowed: false,
+        message: `Daily AI detection limit reached (${usage.count}/${this.dailyCallLimit}). Try again tomorrow or increase the limit in Settings.`
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * Record an API call against the daily cap
+   */
+  recordApiCall() {
+    return this.cache.incrementAIDetectionUsage();
+  }
+
+  /**
    * Extract amount from PDF text using AI
    */
   async extractAmountFromText(text, pdfContext = {}) {
     if (!this.isEnabled) {
       throw new Error('AI detection is disabled');
+    }
+
+    const cacheKey = this.getCacheKey(text, pdfContext);
+    const cached = this.cache.getAIDetectionCache(cacheKey);
+    if (cached) {
+      console.log('[AIDetectionService] Returning cached AI result for', pdfContext.fileName || 'unknown');
+      return { ...cached, fromCache: true };
     }
 
     try {
@@ -67,6 +109,12 @@ export default class AIDetectionService {
         };
       }
       
+      const limitCheck = this.checkDailyCallLimit();
+      if (!limitCheck.allowed) {
+        return { status: 'failed', amount: 0, candidates: [], message: limitCheck.message };
+      }
+
+      this.recordApiCall();
       const prompt = this.buildPrompt(text, pdfContext);
       const response = await this.callOpenRouterWithRetry(prompt);
       
@@ -83,7 +131,9 @@ export default class AIDetectionService {
         };
       }
       
-      return this.parseResponse(response);
+      const result = this.parseResponse(response);
+      this.cache.setAIDetectionCache(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('[AIDetectionService] AI detection failed:', error);
       throw new Error(`AI detection failed: ${error.message}`);
@@ -353,7 +403,8 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
       enabled: this.isEnabled,
       maxPages: this.maxPages,
       apiKey: this.apiKey ? '***configured***' : null,
-      model: this.model
+      model: this.model,
+      dailyCallLimit: this.dailyCallLimit
     };
   }
 
