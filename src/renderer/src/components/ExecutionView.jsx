@@ -132,6 +132,11 @@ export default function ExecutionView({ project, onClose }) {
                                                         ({file.amount.toFixed(2)} €)
                                                     </span>
                                                 )}
+                                                {file.aiExtracted && (
+                                                    <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 600, padding: '0.1rem 0.35rem', borderRadius: '4px', backgroundColor: 'rgba(192, 38, 211, 0.15)', color: '#c026d3' }}>
+                                                        AI
+                                                    </span>
+                                                )}
                                             </span>
                                             <span className={`status-tag ${file.status}`} style={{
                                                 padding: '0.1rem 0.5rem',
