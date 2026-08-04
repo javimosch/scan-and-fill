@@ -147,8 +147,33 @@ export default class AIDetectionService {
    * Build prompt for OpenRouter API
    */
   buildPrompt(text, context) {
-    // Ultra-short prompt for free model to minimize token usage
-    return `Amount from: ${text.substring(0, 200)}
+    // Give the model more of the garbled OCR text so it can reason about
+    // structure and context, while staying within free model token budgets.
+    const maxTextLength = 1500;
+    const cleanText = text
+      .replace(/[\r\n]+/g, '\n')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const truncated = cleanText.length > maxTextLength
+      ? cleanText.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
+      : cleanText;
+
+    return `Extract the final total payable amount from this poorly OCR-scanned invoice or receipt.
+
+File: ${context?.fileName || 'unknown'}
+Pages: ${context?.pageCount || 1}
+
+OCR text (may contain errors):
+"""
+${truncated}
+"""
+
+Instructions:
+- Return exactly one line: AMOUNT: <currency><number> or AMOUNT: NOT_FOUND
+- Prefer the final total the customer must pay, e.g. "net a payer", "total TTC", "total due", or "amount".
+- Ignore account numbers, IBAN, SIRET, dates, phone numbers, quantities, percentages, and discount lines.
+- Do not use thousands separators; use a dot or comma only as the decimal separator.
+
 Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
