@@ -199,7 +199,7 @@ export default class AIDetectionService {
   buildPrompt(text, context) {
     // Give the model more of the garbled OCR text so it can reason about
     // structure and context, while staying within free model token budgets.
-    const maxTextLength = 1500;
+    const maxTextLength = 3000;
     const cleanText = text
       .replace(/[\r\n]+/g, '\n')
       .replace(/\s+/g, ' ')
