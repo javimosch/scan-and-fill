@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import CacheService from './CacheService.js';
 
@@ -308,35 +306,47 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   parseResponse(response) {
     const cleaned = response.trim();
     console.log('[AIDetectionService] Parsing AI response:', cleaned);
-    
+
     // Check for NOT_FOUND response
-    if (cleaned === 'AMOUNT: NOT_FOUND' || cleaned.toLowerCase().includes('not_found')) {
+    if (cleaned.toLowerCase().includes('not_found')) {
       return { status: 'failed', amount: 0, candidates: [], message: 'AI could not find amount' };
     }
 
-    // Multiple regex patterns to catch various formats
-    const patterns = [
-      // Structured format: AMOUNT: €123.45
-      /AMOUNT:\s*([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Structured format: AMOUNT: 123.45€
-      /AMOUNT:\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Original format: €123.45
-      /([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Original format: 123.45€
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Just numbers as fallback
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i
+    // Prefer a structured "AMOUNT: <value>" line and parse the value directly.
+    const amountLineMatch = cleaned.match(/^AMOUNT:\s*(.+)$/im);
+    if (amountLineMatch) {
+      const amountStr = amountLineMatch[1].trim();
+      console.log('[AIDetectionService] Extracted amount string from AMOUNT line:', amountStr);
+
+      const numericAmount = this.parseAmountString(amountStr);
+
+      if (numericAmount > 0) {
+        return {
+          status: 'success',
+          amount: numericAmount,
+          candidates: [numericAmount],
+          message: `AI detected amount: ${amountStr}`
+        };
+      }
+    }
+
+    // Fallback: look for any number near a currency symbol, allowing spaces
+    // between digit groups (e.g. "1 234,56 €" or "6 .930€").
+    const fallbackPatterns = [
+      /([$€£]\s*\d[\d\s.,]*)/,
+      /(\d[\d\s.,]*\s*[$€£])/,
+      /(\d[\d\s.,]+)/
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of fallbackPatterns) {
       const match = cleaned.match(pattern);
       if (match) {
         const amountStr = match[1];
         console.log('[AIDetectionService] Regex matched pattern:', pattern.toString());
         console.log('[AIDetectionService] Extracted amount string:', amountStr);
-        
+
         const numericAmount = this.parseAmountString(amountStr);
-        
+
         if (numericAmount > 0) {
           return {
             status: 'success',
