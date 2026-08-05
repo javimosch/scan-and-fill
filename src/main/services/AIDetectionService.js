@@ -147,9 +147,17 @@ export default class AIDetectionService {
    * Build prompt for OpenRouter API
    */
   buildPrompt(text, context) {
-    // Ultra-short prompt for free model to minimize token usage
-    return `Amount from: ${text.substring(0, 200)}
-Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
+    const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
+    const cleanedText = text.replace(/\s+/g, ' ').trim();
+    const sampleText = cleanedText.length > 4000 ? cleanedText.substring(0, 4000) + '...' : cleanedText;
+
+    return `File: ${fileName}
+Pages: ${pageCount}
+
+Extract the Total HT (hors taxe) amount from this invoice text. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no HT amount is present.
+
+Text:
+${sampleText}`;
   }
 
   /**
