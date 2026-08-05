@@ -274,6 +274,7 @@ ${sampleText}`;
           return {
             status: 'success',
             amount: numericAmount,
+            aiExtracted: true,
             candidates: [numericAmount],
             message: `AI detected amount: ${amountStr}`
           };
