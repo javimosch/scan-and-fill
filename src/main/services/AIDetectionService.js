@@ -154,7 +154,7 @@ export default class AIDetectionService {
     return `File: ${fileName}
 Pages: ${pageCount}
 
-Extract the Total HT (hors taxe) amount from this invoice text. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no HT amount is present.
+Extract the Total HT (hors taxe) amount from this invoice text. If no HT line is present, return the final total or TTC amount. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no total is present.
 
 Text:
 ${sampleText}`;
