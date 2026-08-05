@@ -163,19 +163,42 @@ export default class ParserService {
       // AI Detection Fallback
       if (this._aiDetection.shouldUseFallback(result.status, this.getPageCount(filePath))) {
         this._logger.info(`OCR result: ${result.status}. Triggering AI detection fallback...`);
-        
+
         try {
           const aiSettings = this._settings.getAIDetectionSettings();
           this._aiDetection.initialize(aiSettings);
-          
+
           const pdfContext = {
             fileName: path.basename(filePath),
             pageCount: this.getPageCount(filePath)
           };
-          
+
+          const cachedAI = this.cache.getAICache(filePath);
+          if (cachedAI) {
+            this._logger.info(`Using cached AI fallback result for ${path.basename(filePath)}`);
+            if (cachedAI.status === 'success') {
+              this._logger.logAIDetectionSuccess(filePath, cachedAI.amount, cachedAI.confidence || 'unknown');
+              return {
+                ...cachedAI,
+                method: 'ai',
+                fallback: true,
+                originalResult: result
+              };
+            } else {
+              this._logger.logAIDetectionFailure(filePath, new Error(cachedAI.message || 'Cached AI detection failed'));
+              return {
+                ...result,
+                method: 'ocr',
+                fallbackAttempted: true,
+                fallbackError: cachedAI.message
+              };
+            }
+          }
+
           this._logger.logAIDetectionAttempt(filePath, text.length);
           const aiResult = await this._aiDetection.extractAmountFromText(text, pdfContext);
-          
+          this.cache.setAICache(filePath, aiResult);
+
           if (aiResult.status === 'success') {
             this._logger.logAIDetectionSuccess(filePath, aiResult.amount, aiResult.confidence || 'unknown');
             return {
