@@ -147,9 +147,17 @@ export default class AIDetectionService {
    * Build prompt for OpenRouter API
    */
   buildPrompt(text, context) {
-    // Ultra-short prompt for free model to minimize token usage
-    return `Amount from: ${text.substring(0, 200)}
-Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
+    const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
+    const cleanedText = text.replace(/\s+/g, ' ').trim();
+    const sampleText = cleanedText.length > 4000 ? cleanedText.substring(0, 4000) + '...' : cleanedText;
+
+    return `File: ${fileName}
+Pages: ${pageCount}
+
+Extract the Total HT (hors taxe) amount from this invoice text. If no HT line is present, return the final total or TTC amount. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no total is present.
+
+Text:
+${sampleText}`;
   }
 
   /**
@@ -266,6 +274,7 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
           return {
             status: 'success',
             amount: numericAmount,
+            aiExtracted: true,
             candidates: [numericAmount],
             message: `AI detected amount: ${amountStr}`
           };
@@ -282,13 +291,33 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    const cleaned = amountStr.replace(/[$€£\s]/g, '');
-    
-    // Handle both comma and decimal separators
-    const normalized = cleaned.replace(/,/g, '.');
-    
-    const amount = parseFloat(normalized);
-    
+    let cleaned = amountStr.replace(/[$€£\s]/g, '');
+
+    // No separators: parse directly
+    if (!/[.,]/.test(cleaned)) {
+      const amount = parseFloat(cleaned);
+      return isNaN(amount) ? 0 : amount;
+    }
+
+    // Determine the rightmost separator (decimal or thousands)
+    const lastDot = cleaned.lastIndexOf('.');
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastSeparator = lastDot > lastComma ? '.' : ',';
+
+    const sepIndex = cleaned.lastIndexOf(lastSeparator);
+    const beforeLast = cleaned.substring(0, sepIndex);
+    const lastPart = cleaned.substring(sepIndex + 1);
+
+    if (lastPart.length <= 2) {
+      // Rightmost separator is a decimal point; remove all thousands separators
+      const thousands = beforeLast.replace(/[.,]/g, '');
+      cleaned = `${thousands}.${lastPart}`;
+    } else {
+      // Rightmost separator is a thousands separator; remove all separators
+      cleaned = cleaned.replace(/[.,]/g, '');
+    }
+
+    const amount = parseFloat(cleaned);
     return isNaN(amount) ? 0 : amount;
   }
 

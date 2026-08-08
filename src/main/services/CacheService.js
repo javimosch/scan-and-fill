@@ -15,6 +15,7 @@ export default class CacheService {
     
     this.cacheDir = path.join(userDataPath, 'pdf-cache');
     this.ocrCacheDir = path.join(this.cacheDir, 'ocr');
+    this.aiResultsDir = path.join(this.cacheDir, 'ai-results');
     this.manualEntriesPath = path.join(this.cacheDir, 'manual-entries.json');
     
     // Ensure cache directories exist
@@ -27,6 +28,9 @@ export default class CacheService {
     }
     if (!fs.existsSync(this.ocrCacheDir)) {
       fs.mkdirSync(this.ocrCacheDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.aiResultsDir)) {
+      fs.mkdirSync(this.aiResultsDir, { recursive: true });
     }
   }
 
@@ -55,6 +59,46 @@ export default class CacheService {
       console.warn(`[CacheService] Failed to read OCR cache:`, error.message);
     }
     return null;
+  }
+
+  /**
+   * Get cached AI fallback result for a PDF
+   */
+  getAICache(filePath) {
+    try {
+      const hash = this.getFileHash(filePath);
+      const cachePath = path.join(this.aiResultsDir, `${hash}.json`);
+
+      if (fs.existsSync(cachePath)) {
+        const data = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+        console.log(`[CacheService] AI result cache hit for ${path.basename(filePath)}`);
+        return data.result;
+      }
+    } catch (error) {
+      console.warn(`[CacheService] Failed to read AI cache:`, error.message);
+    }
+    return null;
+  }
+
+  /**
+   * Save AI fallback result to cache
+   */
+  setAICache(filePath, result) {
+    try {
+      const hash = this.getFileHash(filePath);
+      const cachePath = path.join(this.aiResultsDir, `${hash}.json`);
+
+      const data = {
+        fileName: path.basename(filePath),
+        timestamp: new Date().toISOString(),
+        result
+      };
+
+      fs.writeFileSync(cachePath, JSON.stringify(data, null, 2), 'utf8');
+      console.log(`[CacheService] AI result cached for ${path.basename(filePath)}`);
+    } catch (error) {
+      console.warn(`[CacheService] Failed to save AI cache:`, error.message);
+    }
   }
 
   /**

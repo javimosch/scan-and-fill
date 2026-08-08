@@ -130,6 +130,9 @@ export default function ExecutionView({ project, onClose }) {
                                                 {['success', 'skip', 'resolved'].includes(file.status) && (
                                                     <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: '#34d399' }}>
                                                         ({file.amount.toFixed(2)} €)
+                                                        {file.aiExtracted && (
+                                                            <span style={{ marginLeft: '0.35rem', fontSize: '0.6rem', padding: '0.05rem 0.3rem', borderRadius: '0.25rem', backgroundColor: 'var(--primary)', color: '#fff' }} title="Amount extracted by AI fallback">AI</span>
+                                                        )}
                                                     </span>
                                                 )}
                                             </span>

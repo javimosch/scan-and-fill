@@ -139,14 +139,16 @@ export default class ParserService {
       this._logger.debug(`Buffer size: ${dataBuffer.length} bytes`);
       
       const data = await pdfParse(dataBuffer);
+      const pageCount = data.numpages ?? 1;
+      this._logger.info(`PDF page count: ${pageCount}`);
       this._logger.debug(`PDF text extracted, length: ${data.text?.length || 0} characters`);
-      
+
       let text = data.text;
 
       // Detect scanned PDFs (no text or very little text)
       if (!text || text.trim().length < 50) {
           this._logger.info(`Normal extraction failed (text length: ${text?.length || 0}). Triggering OCR...`);
-          this._logger.logOCRAttempt(filePath, this.getPageCount(filePath), 1);
+          this._logger.logOCRAttempt(filePath, pageCount, 1);
           
           try {
             text = await this.performOCR(filePath);
@@ -161,21 +163,44 @@ export default class ParserService {
       this._logger.info(`Amount extraction result: ${result.status}, candidates: ${result.candidates?.length || 0}`);
       
       // AI Detection Fallback
-      if (this._aiDetection.shouldUseFallback(result.status, this.getPageCount(filePath))) {
+      if (this._aiDetection.shouldUseFallback(result.status, pageCount)) {
         this._logger.info(`OCR result: ${result.status}. Triggering AI detection fallback...`);
-        
+
         try {
           const aiSettings = this._settings.getAIDetectionSettings();
           this._aiDetection.initialize(aiSettings);
-          
+
           const pdfContext = {
             fileName: path.basename(filePath),
-            pageCount: this.getPageCount(filePath)
+            pageCount
           };
-          
+
+          const cachedAI = this.cache.getAICache(filePath);
+          if (cachedAI) {
+            this._logger.info(`Using cached AI fallback result for ${path.basename(filePath)}`);
+            if (cachedAI.status === 'success') {
+              this._logger.logAIDetectionSuccess(filePath, cachedAI.amount, cachedAI.confidence || 'unknown');
+              return {
+                ...cachedAI,
+                method: 'ai',
+                fallback: true,
+                originalResult: result
+              };
+            } else {
+              this._logger.logAIDetectionFailure(filePath, new Error(cachedAI.message || 'Cached AI detection failed'));
+              return {
+                ...result,
+                method: 'ocr',
+                fallbackAttempted: true,
+                fallbackError: cachedAI.message
+              };
+            }
+          }
+
           this._logger.logAIDetectionAttempt(filePath, text.length);
           const aiResult = await this._aiDetection.extractAmountFromText(text, pdfContext);
-          
+          this.cache.setAICache(filePath, aiResult);
+
           if (aiResult.status === 'success') {
             this._logger.logAIDetectionSuccess(filePath, aiResult.amount, aiResult.confidence || 'unknown');
             return {
@@ -490,19 +515,15 @@ export default class ParserService {
   }
 
   /**
-   * Get page count from PDF
+   * Get page count from PDF using pdf-parse (numpages).
    */
-  getPageCount(filePath) {
+  async getPageCount(filePath) {
     try {
-      // Simple page count estimation - in a real implementation you might use pdf-parse to get accurate count
-      // For now, we'll use a simple heuristic based on file size
-      const stats = fs.statSync(filePath);
-      const sizeInMB = stats.size / (1024 * 1024);
-      
-      // Rough estimate: ~1MB per page for typical PDFs
-      return Math.max(1, Math.ceil(sizeInMB));
+      const dataBuffer = fs.readFileSync(filePath);
+      const data = await pdfParse(dataBuffer);
+      return data.numpages || 1;
     } catch (error) {
-      console.warn(`[ParserService] Could not estimate page count: ${error.message}`);
+      this._logger.warn(`[ParserService] Could not get page count: ${error.message}`);
       return 1; // Default to 1 page
     }
   }

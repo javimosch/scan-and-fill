@@ -91,6 +91,7 @@ export default class MainService {
             filePath,
             status: result.skipped ? 'skip' : result.status,
             amount: result.amount || 0,
+            aiExtracted: result.aiExtracted || false,
             message: result.message
           };
 
