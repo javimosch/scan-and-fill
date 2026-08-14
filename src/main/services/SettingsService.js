@@ -13,7 +13,7 @@ export default class SettingsService {
         enabled: false,
         maxPages: 1,
         apiKey: null,
-        model: 'openrouter/free'
+        model: 'google/gemini-flash-1.5:free'
       }
     };
     this.initialize();
@@ -132,7 +132,7 @@ export default class SettingsService {
         enabled: false,
         maxPages: 1,
         apiKey: null,
-        model: 'openrouter/free'
+        model: 'google/gemini-flash-1.5:free'
       }
     };
     this.saveSettings();

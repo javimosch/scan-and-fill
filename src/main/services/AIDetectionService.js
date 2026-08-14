@@ -9,7 +9,7 @@ export default class AIDetectionService {
     this.isEnabled = false;
     this.maxPages = 1;
     this.apiKey = null;
-    this.model = 'openrouter/free';
+    this.model = 'google/gemini-flash-1.5:free';
     this.settingsPath = null;
   }
 
@@ -20,7 +20,7 @@ export default class AIDetectionService {
     this.isEnabled = settings.enabled || false;
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
-    this.model = settings.model || 'openrouter/free';
+    this.model = settings.model || 'google/gemini-flash-1.5:free';
   }
 
   /**
@@ -149,7 +149,12 @@ export default class AIDetectionService {
   buildPrompt(text, context) {
     const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
     const cleanedText = text.replace(/\s+/g, ' ').trim();
-    const sampleText = cleanedText.length > 4000 ? cleanedText.substring(0, 4000) + '...' : cleanedText;
+    // Include more of the OCR text so the model sees the full context for
+    // longer scanned receipts (e.g. METRO / LECLERC cases in issue #4).
+    const maxTextLength = 6000;
+    const sampleText = cleanedText.length > maxTextLength
+      ? cleanedText.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
+      : cleanedText;
 
     return `File: ${fileName}
 Pages: ${pageCount}
@@ -165,8 +170,13 @@ ${sampleText}`;
    */
   async callOpenRouter(prompt) {
     const apiKey = this.apiKey || process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is missing. Free models also require an API key for authentication.');
+    }
+
     const isFreeModel = this.model.includes('free');
-    
+
     console.log('[AIDetectionService] API call details:', {
       model: this.model,
       isFreeModel,
