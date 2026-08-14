@@ -17,6 +17,7 @@ export default class CacheService {
     this.ocrCacheDir = path.join(this.cacheDir, 'ocr');
     this.aiResultsDir = path.join(this.cacheDir, 'ai-results');
     this.manualEntriesPath = path.join(this.cacheDir, 'manual-entries.json');
+    this.aiUsagePath = path.join(this.cacheDir, 'ai-usage.json');
     
     // Ensure cache directories exist
     this.ensureCacheDirectories();
@@ -98,6 +99,44 @@ export default class CacheService {
       console.log(`[CacheService] AI result cached for ${path.basename(filePath)}`);
     } catch (error) {
       console.warn(`[CacheService] Failed to save AI cache:`, error.message);
+    }
+  }
+
+  /**
+   * Get today's AI detection API call usage
+   */
+  getAIDetectionUsage() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      if (fs.existsSync(this.aiUsagePath)) {
+        const data = JSON.parse(fs.readFileSync(this.aiUsagePath, 'utf8'));
+        if (data.date === today) {
+          return data;
+        }
+      }
+
+      return { date: today, count: 0 };
+    } catch (error) {
+      console.warn('[CacheService] Failed to read AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
+    }
+  }
+
+  /**
+   * Increment today's AI detection API call count
+   */
+  incrementAIDetectionUsage() {
+    try {
+      const usage = this.getAIDetectionUsage();
+
+      usage.count += 1;
+      fs.writeFileSync(this.aiUsagePath, JSON.stringify(usage, null, 2), 'utf8');
+      console.log(`[CacheService] AI detection usage: ${usage.count} calls today`);
+      return usage;
+    } catch (error) {
+      console.warn('[CacheService] Failed to record AI detection usage:', error.message);
+      return { date: new Date().toISOString().split('T')[0], count: 0 };
     }
   }
 

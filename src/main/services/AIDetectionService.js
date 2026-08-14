@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import CacheService from './CacheService.js';
 
 /**
  * AI Detection Service for OCR fallback using OpenRouter API
@@ -10,7 +9,9 @@ export default class AIDetectionService {
     this.maxPages = 1;
     this.apiKey = null;
     this.model = 'google/gemini-flash-1.5:free';
+    this.dailyCallLimit = 100;
     this.settingsPath = null;
+    this.cache = new CacheService();
   }
 
   /**
@@ -21,6 +22,7 @@ export default class AIDetectionService {
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
     this.model = settings.model || 'google/gemini-flash-1.5:free';
+    this.dailyCallLimit = settings.dailyCallLimit || 100;
   }
 
   /**
@@ -66,7 +68,20 @@ export default class AIDetectionService {
           message: `Text quality too poor for AI analysis (${quality.wordCount} meaningful words detected). ${suggestions.length > 0 ? 'Suggestions: ' + suggestions.join(', ') : ''}` 
         };
       }
-      
+
+      const usage = this.cache.getAIDetectionUsage();
+      if (usage.count >= this.dailyCallLimit) {
+        console.warn(`[AIDetectionService] Daily API call limit reached (${usage.count}/${this.dailyCallLimit})`);
+        return {
+          status: 'failed',
+          amount: 0,
+          candidates: [],
+          message: `Daily AI detection limit reached (${usage.count}/${this.dailyCallLimit}). Try again tomorrow or increase the limit in Settings.`
+        };
+      }
+
+      this.cache.incrementAIDetectionUsage();
+
       const prompt = this.buildPrompt(text, pdfContext);
       const response = await this.callOpenRouterWithRetry(prompt);
       
@@ -148,21 +163,35 @@ export default class AIDetectionService {
    */
   buildPrompt(text, context) {
     const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
-    const cleanedText = text.replace(/\s+/g, ' ').trim();
+    const cleanedText = text
+      .replace(/[\r\n]+/g, '\n')
+      .replace(/\s+/g, ' ')
+      .trim();
     // Include more of the OCR text so the model sees the full context for
     // longer scanned receipts (e.g. METRO / LECLERC cases in issue #4).
-    const maxTextLength = 6000;
+    const maxTextLength = 4000;
     const sampleText = cleanedText.length > maxTextLength
       ? cleanedText.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
       : cleanedText;
 
-    return `File: ${fileName}
+    return `You are extracting a total amount from a poorly OCR-scanned invoice or receipt.
+
+File: ${fileName}
 Pages: ${pageCount}
 
-Extract the Total HT (hors taxe) amount from this invoice text. If no HT line is present, return the final total or TTC amount. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no total is present.
+OCR text (may contain errors):
+"""
+${sampleText}
+"""
 
-Text:
-${sampleText}`;
+Instructions:
+- Return exactly one line: AMOUNT: <currency><number> or AMOUNT: NOT_FOUND
+- Prefer the Total HT (hors taxe) amount. If no HT line is visible, use the final total payable (TTC / net à payer / total due / amount).
+- Ignore account numbers, IBAN, SIRET, dates, phone numbers, quantities, percentages, discount lines and article prices.
+- Do not use thousands separators; use a dot or comma only as the decimal separator.
+- If the amount is unclear from the text, return AMOUNT: NOT_FOUND.
+
+Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
   /**
@@ -251,35 +280,48 @@ ${sampleText}`;
   parseResponse(response) {
     const cleaned = response.trim();
     console.log('[AIDetectionService] Parsing AI response:', cleaned);
-    
+
     // Check for NOT_FOUND response
-    if (cleaned === 'AMOUNT: NOT_FOUND' || cleaned.toLowerCase().includes('not_found')) {
+    if (cleaned.toLowerCase().includes('not_found')) {
       return { status: 'failed', amount: 0, candidates: [], message: 'AI could not find amount' };
     }
 
-    // Multiple regex patterns to catch various formats
-    const patterns = [
-      // Structured format: AMOUNT: €123.45
-      /AMOUNT:\s*([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Structured format: AMOUNT: 123.45€
-      /AMOUNT:\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Original format: €123.45
-      /([$€£]\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i,
-      // Original format: 123.45€
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*[$€£])/i,
-      // Just numbers as fallback
-      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i
+    // Prefer a structured "AMOUNT: <value>" line and parse the value directly.
+    const amountLineMatch = cleaned.match(/^AMOUNT:\s*(.+)$/im);
+    if (amountLineMatch) {
+      const amountStr = amountLineMatch[1].trim();
+      console.log('[AIDetectionService] Extracted amount string from AMOUNT line:', amountStr);
+
+      const numericAmount = this.parseAmountString(amountStr);
+
+      if (numericAmount > 0) {
+        return {
+          status: 'success',
+          amount: numericAmount,
+          aiExtracted: true,
+          candidates: [numericAmount],
+          message: `AI detected amount: ${amountStr}`
+        };
+      }
+    }
+
+    // Fallback: look for any number near a currency symbol, allowing spaces
+    // between digit groups (e.g. "1 234,56 €" or "6 .930€").
+    const fallbackPatterns = [
+      /([$€£]\s*\d[\d\s.,]*)/,
+      /(\d[\d\s.,]*\s*[$€£])/,
+      /(\d[\d.,]+)/
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of fallbackPatterns) {
       const match = cleaned.match(pattern);
       if (match) {
-        const amountStr = match[1];
+        const amountStr = match[1].replace(/\s/g, '');
         console.log('[AIDetectionService] Regex matched pattern:', pattern.toString());
         console.log('[AIDetectionService] Extracted amount string:', amountStr);
-        
+
         const numericAmount = this.parseAmountString(amountStr);
-        
+
         if (numericAmount > 0) {
           return {
             status: 'success',
@@ -301,33 +343,45 @@ ${sampleText}`;
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    let cleaned = amountStr.replace(/[$€£\s]/g, '');
+    let raw = amountStr.replace(/[$€£\s]/g, '');
 
-    // No separators: parse directly
-    if (!/[.,]/.test(cleaned)) {
-      const amount = parseFloat(cleaned);
-      return isNaN(amount) ? 0 : amount;
+    if (!/[\d.,]/.test(raw)) {
+      return 0;
     }
 
-    // Determine the rightmost separator (decimal or thousands)
-    const lastDot = cleaned.lastIndexOf('.');
-    const lastComma = cleaned.lastIndexOf(',');
-    const lastSeparator = lastDot > lastComma ? '.' : ',';
+    const dotIndex = raw.lastIndexOf('.');
+    const commaIndex = raw.lastIndexOf(',');
+    const lastSepIndex = Math.max(dotIndex, commaIndex);
 
-    const sepIndex = cleaned.lastIndexOf(lastSeparator);
-    const beforeLast = cleaned.substring(0, sepIndex);
-    const lastPart = cleaned.substring(sepIndex + 1);
+    if (dotIndex !== -1 && commaIndex !== -1) {
+      // Both separators present: the rightmost one is the decimal separator.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+      raw = `${integer}.${fractional}`;
+    } else if (lastSepIndex !== -1) {
+      // Only one separator: the model was instructed not to use thousands
+      // separators, but OCR artifacts can still produce them. Use the
+      // trailing digit count and the last digit to decide.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
 
-    if (lastPart.length <= 2) {
-      // Rightmost separator is a decimal point; remove all thousands separators
-      const thousands = beforeLast.replace(/[.,]/g, '');
-      cleaned = `${thousands}.${lastPart}`;
-    } else {
-      // Rightmost separator is a thousands separator; remove all separators
-      cleaned = cleaned.replace(/[.,]/g, '');
+      if (fractional.length === 2) {
+        // Standard two-decimal amount.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length === 3 && fractional.endsWith('0')) {
+        // A trailing 0 on three decimals is usually an OCR artifact for a
+        // two-decimal value, e.g. "6 .930€" should be 6.93.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length > 2) {
+        // No decimal part: the separator was a thousands separator.
+        raw = integer + fractional;
+      } else {
+        // One or missing trailing digits: treat as decimal.
+        raw = `${integer}.${fractional}`;
+      }
     }
 
-    const amount = parseFloat(cleaned);
+    const amount = parseFloat(raw);
     return isNaN(amount) ? 0 : amount;
   }
 
@@ -339,7 +393,8 @@ ${sampleText}`;
       enabled: this.isEnabled,
       maxPages: this.maxPages,
       apiKey: this.apiKey ? '***configured***' : null,
-      model: this.model
+      model: this.model,
+      dailyCallLimit: this.dailyCallLimit
     };
   }
 
