@@ -148,21 +148,35 @@ export default class AIDetectionService {
    */
   buildPrompt(text, context) {
     const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
-    const cleanedText = text.replace(/\s+/g, ' ').trim();
+    const cleanedText = text
+      .replace(/[\r\n]+/g, '\n')
+      .replace(/\s+/g, ' ')
+      .trim();
     // Include more of the OCR text so the model sees the full context for
     // longer scanned receipts (e.g. METRO / LECLERC cases in issue #4).
-    const maxTextLength = 6000;
+    const maxTextLength = 4000;
     const sampleText = cleanedText.length > maxTextLength
       ? cleanedText.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
       : cleanedText;
 
-    return `File: ${fileName}
+    return `You are extracting a total amount from a poorly OCR-scanned invoice or receipt.
+
+File: ${fileName}
 Pages: ${pageCount}
 
-Extract the Total HT (hors taxe) amount from this invoice text. If no HT line is present, return the final total or TTC amount. The text was produced by OCR and may contain errors. Return only the number, using a dot or comma as the decimal separator, or the word NOT_FOUND if no total is present.
+OCR text (may contain errors):
+"""
+${sampleText}
+"""
 
-Text:
-${sampleText}`;
+Instructions:
+- Return exactly one line: AMOUNT: <currency><number> or AMOUNT: NOT_FOUND
+- Prefer the Total HT (hors taxe) amount. If no HT line is visible, use the final total payable (TTC / net à payer / total due / amount).
+- Ignore account numbers, IBAN, SIRET, dates, phone numbers, quantities, percentages, discount lines and article prices.
+- Do not use thousands separators; use a dot or comma only as the decimal separator.
+- If the amount is unclear from the text, return AMOUNT: NOT_FOUND.
+
+Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
   }
 
   /**
