@@ -149,7 +149,12 @@ export default class AIDetectionService {
   buildPrompt(text, context) {
     const { fileName = 'unknown.pdf', pageCount = 1 } = context || {};
     const cleanedText = text.replace(/\s+/g, ' ').trim();
-    const sampleText = cleanedText.length > 4000 ? cleanedText.substring(0, 4000) + '...' : cleanedText;
+    // Include more of the OCR text so the model sees the full context for
+    // longer scanned receipts (e.g. METRO / LECLERC cases in issue #4).
+    const maxTextLength = 6000;
+    const sampleText = cleanedText.length > maxTextLength
+      ? cleanedText.substring(0, maxTextLength).replace(/\s+\S*$/, '') + '...'
+      : cleanedText;
 
     return `File: ${fileName}
 Pages: ${pageCount}
