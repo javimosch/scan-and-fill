@@ -165,8 +165,13 @@ ${sampleText}`;
    */
   async callOpenRouter(prompt) {
     const apiKey = this.apiKey || process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is missing. Free models also require an API key for authentication.');
+    }
+
     const isFreeModel = this.model.includes('free');
-    
+
     console.log('[AIDetectionService] API call details:', {
       model: this.model,
       isFreeModel,
