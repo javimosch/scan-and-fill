@@ -16,7 +16,7 @@ export default function SettingsModal({ isOpen, onClose }) {
     enabled: false,
     maxPages: 1,
     apiKey: '',
-    model: 'openrouter/free'
+    model: 'google/gemini-flash-1.5:free'
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -300,7 +300,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                 color: 'var(--text)'
               }}
             >
-              <option value="openrouter/free">Free (openrouter/free) - No API key required</option>
+              <option value="google/gemini-flash-1.5:free">Gemini Flash 1.5 (free)</option>
               <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo - API key required</option>
               <option value="openai/gpt-4">GPT-4 - API key required</option>
               <option value="anthropic/claude-3-haiku">Claude 3 Haiku - API key required</option>

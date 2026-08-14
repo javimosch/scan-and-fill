@@ -9,7 +9,7 @@ export default class AIDetectionService {
     this.isEnabled = false;
     this.maxPages = 1;
     this.apiKey = null;
-    this.model = 'openrouter/free';
+    this.model = 'google/gemini-flash-1.5:free';
     this.settingsPath = null;
   }
 
@@ -20,7 +20,7 @@ export default class AIDetectionService {
     this.isEnabled = settings.enabled || false;
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
-    this.model = settings.model || 'openrouter/free';
+    this.model = settings.model || 'google/gemini-flash-1.5:free';
   }
 
   /**
