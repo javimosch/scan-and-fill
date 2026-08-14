@@ -328,33 +328,45 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
    */
   parseAmountString(amountStr) {
     // Remove currency symbols and whitespace
-    let cleaned = amountStr.replace(/[$€£\s]/g, '');
+    let raw = amountStr.replace(/[$€£\s]/g, '');
 
-    // No separators: parse directly
-    if (!/[.,]/.test(cleaned)) {
-      const amount = parseFloat(cleaned);
-      return isNaN(amount) ? 0 : amount;
+    if (!/[\d.,]/.test(raw)) {
+      return 0;
     }
 
-    // Determine the rightmost separator (decimal or thousands)
-    const lastDot = cleaned.lastIndexOf('.');
-    const lastComma = cleaned.lastIndexOf(',');
-    const lastSeparator = lastDot > lastComma ? '.' : ',';
+    const dotIndex = raw.lastIndexOf('.');
+    const commaIndex = raw.lastIndexOf(',');
+    const lastSepIndex = Math.max(dotIndex, commaIndex);
 
-    const sepIndex = cleaned.lastIndexOf(lastSeparator);
-    const beforeLast = cleaned.substring(0, sepIndex);
-    const lastPart = cleaned.substring(sepIndex + 1);
+    if (dotIndex !== -1 && commaIndex !== -1) {
+      // Both separators present: the rightmost one is the decimal separator.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
+      raw = `${integer}.${fractional}`;
+    } else if (lastSepIndex !== -1) {
+      // Only one separator: the model was instructed not to use thousands
+      // separators, but OCR artifacts can still produce them. Use the
+      // trailing digit count and the last digit to decide.
+      const integer = raw.slice(0, lastSepIndex).replace(/[.,]/g, '');
+      const fractional = raw.slice(lastSepIndex + 1).replace(/[.,]/g, '');
 
-    if (lastPart.length <= 2) {
-      // Rightmost separator is a decimal point; remove all thousands separators
-      const thousands = beforeLast.replace(/[.,]/g, '');
-      cleaned = `${thousands}.${lastPart}`;
-    } else {
-      // Rightmost separator is a thousands separator; remove all separators
-      cleaned = cleaned.replace(/[.,]/g, '');
+      if (fractional.length === 2) {
+        // Standard two-decimal amount.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length === 3 && fractional.endsWith('0')) {
+        // A trailing 0 on three decimals is usually an OCR artifact for a
+        // two-decimal value, e.g. "6 .930€" should be 6.93.
+        raw = `${integer}.${fractional}`;
+      } else if (fractional.length > 2) {
+        // No decimal part: the separator was a thousands separator.
+        raw = integer + fractional;
+      } else {
+        // One or missing trailing digits: treat as decimal.
+        raw = `${integer}.${fractional}`;
+      }
     }
 
-    const amount = parseFloat(cleaned);
+    const amount = parseFloat(raw);
     return isNaN(amount) ? 0 : amount;
   }
 
