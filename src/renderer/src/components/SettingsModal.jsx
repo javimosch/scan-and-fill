@@ -16,7 +16,8 @@ export default function SettingsModal({ isOpen, onClose }) {
     enabled: false,
     maxPages: 1,
     apiKey: '',
-    model: 'google/gemini-flash-1.5:free'
+    model: 'google/gemini-flash-1.5:free',
+    dailyCallLimit: 100
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -258,17 +259,42 @@ export default function SettingsModal({ isOpen, onClose }) {
             </p>
           </div>
 
+          {/* Daily API Call Limit */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              Daily API call limit
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              value={aiSettings.dailyCallLimit || 100}
+              onChange={(e) => handleChange('dailyCallLimit', parseInt(e.target.value) || 100)}
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                backgroundColor: 'var(--background)',
+                color: 'var(--text)'
+              }}
+            />
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Stop AI fallback once this many OpenRouter calls have been made today
+            </p>
+          </div>
+
           {/* API Key */}
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
               <Key size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
-              API Key (optional for free models)
+              OpenRouter API Key
             </label>
             <input
               type="password"
               value={aiSettings.apiKey}
               onChange={(e) => handleChange('apiKey', e.target.value)}
-              placeholder="Enter OpenRouter API key (optional)"
+              placeholder="Enter OpenRouter API key"
               style={{
                 width: '100%',
                 padding: '0.5rem',
@@ -279,7 +305,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               }}
             />
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Required for paid models only. Free models work without a key.
+              An OpenRouter API key is required for all requests, including free models.
             </p>
           </div>
 

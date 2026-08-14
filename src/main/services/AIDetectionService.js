@@ -1,3 +1,5 @@
+import CacheService from './CacheService.js';
+
 /**
  * AI Detection Service for OCR fallback using OpenRouter API
  */
@@ -7,7 +9,9 @@ export default class AIDetectionService {
     this.maxPages = 1;
     this.apiKey = null;
     this.model = 'google/gemini-flash-1.5:free';
+    this.dailyCallLimit = 100;
     this.settingsPath = null;
+    this.cache = new CacheService();
   }
 
   /**
@@ -18,6 +22,7 @@ export default class AIDetectionService {
     this.maxPages = settings.maxPages || 1;
     this.apiKey = settings.apiKey || null;
     this.model = settings.model || 'google/gemini-flash-1.5:free';
+    this.dailyCallLimit = settings.dailyCallLimit || 100;
   }
 
   /**
@@ -63,7 +68,20 @@ export default class AIDetectionService {
           message: `Text quality too poor for AI analysis (${quality.wordCount} meaningful words detected). ${suggestions.length > 0 ? 'Suggestions: ' + suggestions.join(', ') : ''}` 
         };
       }
-      
+
+      const usage = this.cache.getAIDetectionUsage();
+      if (usage.count >= this.dailyCallLimit) {
+        console.warn(`[AIDetectionService] Daily API call limit reached (${usage.count}/${this.dailyCallLimit})`);
+        return {
+          status: 'failed',
+          amount: 0,
+          candidates: [],
+          message: `Daily AI detection limit reached (${usage.count}/${this.dailyCallLimit}). Try again tomorrow or increase the limit in Settings.`
+        };
+      }
+
+      this.cache.incrementAIDetectionUsage();
+
       const prompt = this.buildPrompt(text, pdfContext);
       const response = await this.callOpenRouterWithRetry(prompt);
       
@@ -375,7 +393,8 @@ Format: AMOUNT: €123.45 or AMOUNT: NOT_FOUND`;
       enabled: this.isEnabled,
       maxPages: this.maxPages,
       apiKey: this.apiKey ? '***configured***' : null,
-      model: this.model
+      model: this.model,
+      dailyCallLimit: this.dailyCallLimit
     };
   }
 

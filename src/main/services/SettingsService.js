@@ -13,7 +13,8 @@ export default class SettingsService {
         enabled: false,
         maxPages: 1,
         apiKey: null,
-        model: 'google/gemini-flash-1.5:free'
+        model: 'google/gemini-flash-1.5:free',
+        dailyCallLimit: 100
       }
     };
     this.initialize();
@@ -132,7 +133,8 @@ export default class SettingsService {
         enabled: false,
         maxPages: 1,
         apiKey: null,
-        model: 'google/gemini-flash-1.5:free'
+        model: 'google/gemini-flash-1.5:free',
+        dailyCallLimit: 100
       }
     };
     this.saveSettings();
