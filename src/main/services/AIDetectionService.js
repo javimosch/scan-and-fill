@@ -1,6 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-
 /**
  * AI Detection Service for OCR fallback using OpenRouter API
  */
